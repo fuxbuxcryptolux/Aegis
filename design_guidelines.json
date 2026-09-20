@@ -1,0 +1,185 @@
+{
+  "project_name": "Aegis Rogue: Tower Defense RPG",
+  "design_archetype": "Modern Dark-Mode Tactical Arcade (Obsidian Slate + Cyan & Amber Neon Energy)",
+  "theme": "dark",
+  "summary": "High-octane 60fps HTML5 Canvas Roguelike Tower Defense RPG with tactical cyber-fantasy aesthetic. Dark obsidian-zinc foundations with luminous cyan plasma, energized amber gold, and laser ruby accents. Crystal-glass floating HUD, arcade drawer docks, tactile perk cards, and integrated monetization affordances.",
+  "typography": {
+    "font_families": {
+      "display_heading": "'Chivo', 'Barlow Condensed', sans-serif",
+      "body": "'IBM Plex Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif",
+      "code_stats": "'JetBrains Mono', 'Fira Code', monospace"
+    },
+    "scale": {
+      "h1_hero": "text-4xl sm:text-5xl lg:text-6xl font-black tracking-tight uppercase",
+      "h2_section": "text-2xl sm:text-3xl lg:text-4xl font-extrabold tracking-tight",
+      "h3_modal_title": "text-xl sm:text-2xl font-bold tracking-normal",
+      "h4_card_title": "text-lg sm:text-xl font-bold uppercase tracking-wider",
+      "body_base": "text-sm sm:text-base font-normal leading-relaxed text-zinc-300",
+      "caption_stats": "text-xs font-mono uppercase tracking-[0.2em] text-zinc-400"
+    },
+    "rules": [
+      "Never use Inter or generic sans for headings. Use Chivo / Barlow Condensed with tracking-tight and uppercase punch.",
+      "Stats, cooldown clocks, HP values, gold numbers MUST use monospace ('JetBrains Mono' / font-mono) to eliminate numerical jitter.",
+      "Headings capped at text-6xl. Labels and overlines must be tracking-[0.2em] and uppercase."
+    ]
+  },
+  "colors": {
+    "palette": {
+      "background_dark": "#090d16",
+      "surface_slate": "#0f172a",
+      "surface_card": "#131b2e",
+      "surface_card_highlight": "#1e293b",
+      "border_dark": "rgba(255, 255, 255, 0.08)",
+      "border_accent_cyan": "rgba(6, 182, 212, 0.4)",
+      "border_accent_amber": "rgba(245, 158, 11, 0.4)",
+      "cyan_primary": "#06b6d4",
+      "cyan_glow": "rgba(6, 182, 212, 0.25)",
+      "amber_gold": "#f59e0b",
+      "amber_glow": "rgba(245, 158, 11, 0.25)",
+      "ruby_danger": "#ef4444",
+      "ruby_glow": "rgba(239, 68, 68, 0.3)",
+      "emerald_heal": "#10b981",
+      "amethyst_perk": "#8b5cf6",
+      "text_primary": "#f8fafc",
+      "text_secondary": "#94a3b8",
+      "text_muted": "#64748b"
+    },
+    "rules": [
+      "Forbidden color #7351B7 and forbidden dashboard teal (#1B93A4).",
+      "Base background is deep obsidian-zinc (#090d16 / #0f172a), never flat pure black #000000.",
+      "Glows: 1px subtle neon borders + drop-shadow / box-shadow tint instead of opaque heavy gradients.",
+      "Hover text color MUST ALWAYS be explicitly defined with hover:text-white / hover:text-cyan-300."
+    ]
+  },
+  "layout_and_grids": {
+    "screen_structure": {
+      "wrapper": "relative w-full h-screen overflow-hidden bg-[#090d16] select-none font-sans text-slate-100 flex flex-col",
+      "top_sticky_ad_banner": "h-10 bg-zinc-950/90 border-b border-white/5 flex items-center justify-between px-4 z-40 text-xs text-zinc-400",
+      "top_hud": "h-16 px-4 sm:px-6 bg-[#0f172a]/90 backdrop-blur-xl border-b border-cyan-500/20 flex items-center justify-between z-30 shadow-[0_4px_24px_rgba(0,0,0,0.6)]",
+      "canvas_container": "relative flex-1 w-full overflow-hidden bg-[#090d16] flex items-center justify-center",
+      "canvas_element": "block bg-[#090d16] cursor-crosshair rounded-none",
+      "bottom_control_drawer": "h-28 sm:h-32 bg-[#0f172a]/95 backdrop-blur-2xl border-t border-cyan-500/20 px-4 py-2 z-30 flex items-center justify-between gap-3 shadow-[0_-8px_32px_rgba(0,0,0,0.7)]",
+      "bottom_sticky_ad_banner": "h-9 bg-zinc-950/90 border-t border-white/5 flex items-center justify-center px-4 z-40 text-xs text-zinc-400"
+    },
+    "grid_modes": {
+      "tower_drawer": "flex items-center gap-2 sm:gap-3 overflow-x-auto py-1 scrollbar-thin",
+      "hero_dock": "flex items-center gap-2 pl-3 border-l border-white/10 shrink-0",
+      "perk_cards_modal": "grid grid-cols-1 md:grid-cols-3 gap-4 sm:gap-6 w-full max-w-4xl p-2",
+      "offerwall_vault_grid": "grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 p-4 max-h-[60vh] overflow-y-auto"
+    }
+  },
+  "components_specification": {
+    "top_hud": {
+      "nexus_health_bar": {
+        "description": "Base Health Bar Nexus HP with animated gradient fill (ruby red to emerald shield) and numerical badge (100/100)",
+        "test_id": "nexus-base-hp-bar"
+      },
+      "currencies": {
+        "gold_counter": "Icon (Coins) + font-mono bold #f59e0b text (test-id: 'hud-gold-counter')",
+        "gems_counter": "Icon (Gem/Diamond) + font-mono bold #06b6d4 text (test-id: 'hud-gems-counter')",
+        "soul_gems_prestige": "Icon (Sparkles) + font-mono bold #a855f7 text (test-id: 'hud-soulgems-counter')"
+      },
+      "wave_indicator": {
+        "title": "Wave X/20 with pulse badge on Boss Wave (Wave 5, 10, 15, 20)",
+        "sublabel": "'Boss Approaching!' or 'Breach in progress'",
+        "test_id": "hud-wave-indicator"
+      },
+      "controls": {
+        "speed_toggle": "1x / 2x / 3x speed segmented button (test-id: 'hud-speed-toggle')",
+        "pause_resume": "Play/Pause toggle (test-id: 'hud-pause-btn')",
+        "sound_toggle": "Audio synthesis on/off toggle (test-id: 'hud-sound-toggle')",
+        "vault_btn": "Free Gem & Tower Vault button (test-id: 'hud-vault-open-btn')",
+        "leaderboard_btn": "Leaderboard modal trigger (test-id: 'hud-leaderboard-btn')"
+      }
+    },
+    "canvas_game_engine": {
+      "fps_target": 60,
+      "viewport": "Dynamic scale to match available canvas_container dimensions with DPR awareness",
+      "towers": [
+        {"id": "archer", "name": "Balista Archer", "cost": 100, "range": 130, "color": "#06b6d4", "type": "Rapid single-target projectile"},
+        {"id": "frost", "name": "Frost Nova", "cost": 150, "range": 110, "color": "#38bdf8", "type": "AoE cold pulse slowing enemies 50%"},
+        {"id": "inferno", "name": "Inferno Cannon", "cost": 220, "range": 150, "color": "#f97316", "type": "Incendiary explosive splash"},
+        {"id": "tesla", "name": "Tesla Coil", "cost": 300, "range": 120, "color": "#a855f7", "type": "Chain lightning zap up to 4 targets"}
+      ],
+      "hero_abilities": [
+        {"id": "nuke", "name": "Orbital Nuke", "cooldown": 25, "icon": "Bomb", "color": "#ef4444", "description": "Global catastrophic AoE strike wiping standard creeps"},
+        {"id": "freeze", "name": "Polar Wave", "cooldown": 18, "icon": "Snowflake", "color": "#38bdf8", "description": "Freezes all field creeps for 4 seconds"},
+        {"id": "heal", "name": "Nanite Repair", "cooldown": 30, "icon": "HeartPulse", "color": "#10b981", "description": "Restores 35 Nexus base HP"}
+      ],
+      "creep_types": [
+        {"name": "Scout Swarm", "speed": 2.2, "hp": 45, "reward": 8, "color": "#94a3b8"},
+        {"name": "Armored Brute", "speed": 1.1, "hp": 180, "reward": 22, "color": "#eab308"},
+        {"name": "Void Phantom", "speed": 1.8, "hp": 90, "reward": 15, "color": "#c084fc", "special": "Shielded"},
+        {"name": "GOLIATH TITAN BOSS", "speed": 0.65, "hp": 1400, "reward": 180, "color": "#f43f5e", "special": "Mega Boss (Every 5 waves)"}
+      ]
+    },
+    "modals_and_overlays": {
+      "roguelike_draft_modal": {
+        "title": "WAVE CLEARED // SELECT TACTICAL PROTOCOL",
+        "cards_count": 3,
+        "reroll_cta": "Reroll Protocol (Watch Ad)",
+        "test_id": "draft-modal",
+        "reroll_test_id": "draft-reroll-ad-btn"
+      },
+      "defeat_modal": {
+        "title": "NEXUS DEFENSE COMPROMISED",
+        "revive_cta": "Second Chance Revive (Watch Ad) - Restores 50% HP",
+        "forfeit_cta": "End Run & Claim Soul Gems",
+        "test_id": "defeat-revive-modal",
+        "revive_test_id": "defeat-revive-ad-btn"
+      },
+      "victory_modal": {
+        "title": "SECTOR DEFENDED - VICTORY!",
+        "claim_standard_cta": "Claim Wave Spoils",
+        "claim_double_cta": "Claim 2X Gold & Gems (Watch Ad)",
+        "test_id": "victory-double-modal",
+        "double_test_id": "victory-claim-2x-ad-btn"
+      },
+      "affiliate_offerwall_vault": {
+        "title": "FREE GEM & TOWER VAULT // SPODNSORED AIRDROP",
+        "tabs": ["Affiliate Offerwall", "SpawnTap Playtime SDK", "Soul Gem Prestige Forge"],
+        "test_id": "offerwall-vault-modal"
+      },
+      "ad_interstitial_simulator": {
+        "duration_sec": 5,
+        "countdown_test_id": "ad-interstitial-timer",
+        "close_test_id": "ad-interstitial-skip-btn",
+        "description": "Authentic mock interactive video / playable ad banner modal with real countdown and reward callback"
+      }
+    }
+  },
+  "image_urls": {
+    "arcade_cabinet_bg": "https://images.unsplash.com/photo-1572289758057-3e0f4327833b?crop=entropy&cs=srgb&fm=jpg&ixid=M3w4NjA2ODl8MHwxfHNlYXJjaHw0fHxhcmNhZGUlMjBnYW1lJTIwY29uc29sZXxlbnwwfHx8fDE3ODk5MzM3NjR8MA&ixlib=rb-4.1.0&q=85",
+    "cyber_warrior_hero": "https://images.unsplash.com/photo-1692827355562-c76b024de0b2?crop=entropy&cs=srgb&fm=jpg&ixid=M3w4NjY2NjV8MHwxfHNlYXJjaHw0fHxjeWJlcnB1bmslMjBnYW1pbmd8ZW58MHx8fHwxNzg5OTMzNzYxfDA&ixlib=rb-4.1.0&q=85",
+    "arcade_neon_grid": "https://images.unsplash.com/photo-1759171053096-e7dbe7c36eb6?crop=entropy&cs=srgb&fm=jpg&ixid=M3w4NjY2NjV8MHwxfHNlYXJjaHwzfHxjeWJlcnB1bmslMjBnYW1pbmd8ZW58MHx8fHwxNzg5OTMzNzYxfDA&ixlib=rb-4.1.0&q=85",
+    "retro_gamer_station": "https://images.unsplash.com/photo-1550745165-9bc0b252726f?crop=entropy&cs=srgb&fm=jpg&ixid=M3w4NjA2ODl8MHwxfHNlYXJjaHwxfHxhcmNhZGUlMjBnYW1lJTIwY29uc29sZXxlbnwwfHx8fDE3ODk5MzM3NjR8MA&ixlib=rb-4.1.0&q=85"
+  },
+  "sound_synthesis_web_audio": {
+    "engine": "Native HTML5 Web Audio API Synth (Sine / Square / Sawtooth waves with exponential decay)",
+    "effects": {
+      "tower_shoot": "1200Hz -> 300Hz quick sawtooth chirp (0.08s)",
+      "freeze_nova": "400Hz frequency modulation white noise / cold resonance (0.25s)",
+      "cannon_boom": "80Hz sub-bass sine drop + noise envelope (0.35s)",
+      "tesla_zap": "Dual oscillator high-voltage buzzy arpeggio (0.12s)",
+      "creep_death": "Soft coin ping 880Hz -> 1320Hz sine",
+      "boss_roar": "Low saw rumble with LFO wobble",
+      "perk_select": "Triumphant major triad chime (523Hz -> 659Hz -> 784Hz)",
+      "ad_reward": "Retro arcade jackpot arpeggio"
+    }
+  },
+  "instructions_to_main_agent": [
+    "Build the complete HTML5 60fps canvas loop inside a responsive canvas manager with touch and mouse coordinate mapping.",
+    "Implement the 4 tower types with range rings, target acquisition (First / Lowest HP / Strongest), and projectile physics.",
+    "Hero unit can be relocated on canvas by right clicking or tap-to-move, and Hero has 3 click-to-cast tactical skills with cooldown overlays.",
+    "Implement the full wave engine: 20 progressive waves, creep paths with corners, health bars above creeps, and Boss encounter every 5 waves.",
+    "Build all 5 monetization placements: Sticky top & bottom ad banners, Second Chance revive modal, Roguelike perk card reroll via rewarded ad, 2x victory loot ad, and the Affiliate Offerwall Vault with SpawnTap Playtime SDK simulated iframe & live status pill.",
+    "Include full Web Audio API synthesis so sound effects work immediately with zero external mp3 asset failures.",
+    "Add 'data-testid' attributes to all interactive elements specified in this guideline.",
+    "Support offline persistence via localStorage (High score, Soul Gems, unlocked permanent talent upgrades, gold)."
+  ],
+  "UNIVERSAL GUIDELINES FOR MAIN AGENT": {
+    "no_transparent_overlays": "Never use pure transparent backgrounds for modals, drawers or headers; always backdrop-blur-xl bg-slate-900/90 with 1px border-cyan-500/30.",
+    "no_ai_slop": "Use high contrast typography, crisp borders, neon glow pills, and responsive layout without generic centered layouts.",
+    "responsive_touch": "Ensure bottom tower drawer and HUD buttons are easily tappable on mobile screens (minimum 44px hitboxes)."
+  }
+}
