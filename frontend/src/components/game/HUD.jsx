@@ -53,10 +53,10 @@ export default function HUD({ state, onSpeed, onPause, onToggleSound, soundOn, o
             bossSoon || state.isBoss ? "border-red-500/50 bg-red-500/10 pulse-danger" : "border-cyan-500/30 bg-slate-900/60"
           }`}
         >
-          <span className="font-display font-black text-sm sm:text-base leading-none tracking-tight">
+          <span className="block font-display font-black text-sm sm:text-base leading-tight tracking-tight">
             WAVE {state.wave}/{state.maxWave}
           </span>
-          <span className={`text-[9px] font-mono uppercase tracking-wider ${bossSoon || state.isBoss ? "text-red-400" : "text-zinc-500"}`}>
+          <span className={`block text-[9px] font-mono uppercase tracking-wider leading-tight ${bossSoon || state.isBoss ? "text-red-400" : "text-zinc-500"}`}>
             {state.isBoss ? "BOSS ON FIELD" : bossSoon ? "Boss approaching!" : state.waveStatus === "active" ? `${state.enemiesRemaining} hostiles` : "Standing by"}
           </span>
         </div>

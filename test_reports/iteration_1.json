@@ -1,0 +1,24 @@
+{
+  "summary": "Full-stack testing of Aegis Rogue tower defense. Backend: 8/8 pytest tests passing across health, leaderboard (POST/GET with score sorting & _id excluded) and monetization (log/summary). Frontend: Start screen -> canvas transition works, all HUD elements render (nexus HP bar, gold=300, gems, wave, speed toggles, pause, sound, vault, leaderboard, top/bottom ad banners). Tower placement flow works: selecting archer + clicking near path deducts 100 gold; wave start spawns creeps; hero abilities present and clickable; tower upgrade panel (upgrade/sell) opens on tower click. Wave 1 cleared -> draft modal appeared with 3 cards; reroll opened ad-interstitial, 5s countdown enabled claim, card pick closes modal. Vault modal opens with 3 tabs (Affiliate Vault w/ offer cards, SpawnTap SDK showing 'Fallback Mock Mode' pill, Prestige Forge w/ prestige-btn). Leaderboard modal loads and displays backend entries including TEST_ names. SpawnTap SDK correctly falls back to mock mode when sdk.spawntap.com is unreachable.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {
+    "ui_bugs": [
+      {"component": "HUD wave indicator", "issue": "Missing whitespace between wave count and status label: renders 'WAVE 0/20Standing by' / 'WAVE 1/208 hostiles' (the '8' is enemy count squished to '20'). Add a space or separator between wave text and hostiles/status text.", "selector": "[data-testid=hud-wave-indicator]", "priority": "LOW"}
+    ],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "test_report_links": ["/app/backend/tests/backend_test.py", "/app/test_reports/pytest/pytest_results.xml"],
+  "action_items": ["(Optional) Add a space/separator between wave counter and hostiles-status text in HUD wave indicator so it reads 'WAVE 1/20 · 8 hostiles' instead of 'WAVE 1/208 hostiles'."],
+  "critical_code_review_comments": [
+    "engine.js is ~1140 lines - consider splitting into engine-core/render/combat modules for maintainability (>700 line threshold).",
+    "SpawnTap adapter is instantiated twice per mount in dev/StrictMode (2x 'Initializing SpawnTap Bridge' logs). Cleanup on useEffect return exists but adapter side-effects (script tag injection) may still duplicate. Non-critical in prod build.",
+    "Backend leaderboard has no cap on entries stored - consider TTL/prune for long-term growth."
+  ],
+  "updated_files": ["/app/backend/tests/backend_test.py"],
+  "success_rate": {"backend": "100%", "frontend": "~98% (1 cosmetic text spacing issue)"},
+  "seed_data_creation": "Backend leaderboard now has TEST_ prefixed entries (TEST_Hero, TEST_High, TEST_Low, etc.) and TEST_user monetization events used for regression.",
+  "retest_needed": false,
+  "should_main_agent_self_test": true,
+  "context_for_next_testing_agent": "Playwright approach for tower placement: canvas is 960x560 world, letterboxed. Compute scale=min(cw/960, ch/560), offsets, then world (140, 60) is a valid buildable spot (near first horizontal path segment). Set speed 3x via hud-speed-3x to advance waves faster; wave 1 clears in ~30-50s. Vault tabs use data-testid vault-tab-{offers|spawntap|prestige}."
+}
