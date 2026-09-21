@@ -768,7 +768,7 @@ export default class GameEngine {
     const w = this.canvas.width / this.dpr;
     const h = this.canvas.height / this.dpr;
     ctx.clearRect(0, 0, w, h);
-    ctx.fillStyle = "#090d16";
+    ctx.fillStyle = "#dfd0b0";
     ctx.fillRect(0, 0, w, h);
 
     ctx.save();
@@ -813,8 +813,8 @@ export default class GameEngine {
       const occupied = this.towers.some((t) => t.spotKey === s.key);
       if (occupied) continue;
       if (this.selectedTower) {
-        ctx.fillStyle = "rgba(6,182,212,0.08)";
-        ctx.strokeStyle = "rgba(6,182,212,0.35)";
+        ctx.fillStyle = "rgba(184,134,11,0.08)";
+        ctx.strokeStyle = "rgba(61,43,31,0.35)";
         ctx.lineWidth = 1;
         ctx.beginPath();
         ctx.arc(s.x, s.y, 15, 0, Math.PI * 2);
@@ -827,23 +827,15 @@ export default class GameEngine {
   _drawPath(ctx) {
     ctx.lineJoin = "round";
     ctx.lineCap = "round";
-    // outer glow band
-    ctx.strokeStyle = "rgba(6,182,212,0.12)";
-    ctx.lineWidth = 52;
+    ctx.strokeStyle = "#3d2b1f";
+    ctx.lineWidth = 36;
     this._pathStroke(ctx);
-    // inner road
-    ctx.strokeStyle = "#0e1626";
-    ctx.lineWidth = 40;
+    ctx.strokeStyle = "#cbba95";
+    ctx.lineWidth = 28;
     this._pathStroke(ctx);
-    // edge line
-    ctx.strokeStyle = "rgba(6,182,212,0.5)";
+    ctx.setLineDash([8, 8]);
+    ctx.strokeStyle = "rgba(61,43,31,0.4)";
     ctx.lineWidth = 2;
-    this._pathStroke(ctx);
-    // animated dashes
-    ctx.setLineDash([14, 18]);
-    ctx.lineDashOffset = -(performance.now() / 30) % 32;
-    ctx.strokeStyle = "rgba(245,158,11,0.5)";
-    ctx.lineWidth = 3;
     this._pathStroke(ctx);
     ctx.setLineDash([]);
   }
@@ -859,17 +851,18 @@ export default class GameEngine {
     const b = this.base;
     const pulse = 0.5 + Math.sin(performance.now() / 300) * 0.2;
     ctx.save();
-    ctx.shadowColor = "#06b6d4";
-    ctx.shadowBlur = 25;
-    ctx.fillStyle = "#0f172a";
-    ctx.strokeStyle = "#06b6d4";
+    ctx.shadowColor = "rgba(61,43,31,0.4)";
+    ctx.shadowBlur = 0;
+    ctx.shadowOffsetY = 4;
+    ctx.fillStyle = "#f3e9d2";
+    ctx.strokeStyle = "#3d2b1f";
     ctx.lineWidth = 3;
     ctx.beginPath();
     ctx.arc(b.x, b.y, 26, 0, Math.PI * 2);
     ctx.fill();
     ctx.stroke();
     ctx.shadowBlur = 0;
-    ctx.fillStyle = `rgba(6,182,212,${pulse})`;
+    ctx.fillStyle = `rgba(139,38,38,${pulse})`;
     ctx.beginPath();
     ctx.arc(b.x, b.y, 12, 0, Math.PI * 2);
     ctx.fill();
@@ -878,37 +871,52 @@ export default class GameEngine {
 
   _drawTowers(ctx) {
     for (const t of this.towers) {
-      const def = TOWERS[t.id];
       const st = this.towerStats(t);
       const selected = this.selectedPlaced === t;
       if (selected) {
-        ctx.fillStyle = "rgba(6,182,212,0.06)";
-        ctx.strokeStyle = "rgba(6,182,212,0.4)";
-        ctx.lineWidth = 1.5;
+        ctx.strokeStyle = "#8b2626";
+        ctx.globalAlpha = 0.75;
+        ctx.setLineDash([8, 8]);
+        ctx.lineWidth = 2;
         ctx.beginPath();
         ctx.arc(t.x, t.y, st.range, 0, Math.PI * 2);
-        ctx.fill();
         ctx.stroke();
+        ctx.setLineDash([]);
+        ctx.globalAlpha = 1;
       }
       ctx.save();
-      ctx.shadowColor = def.color;
-      ctx.shadowBlur = 12;
-      // base
-      ctx.fillStyle = "#131b2e";
-      ctx.strokeStyle = def.color;
-      ctx.lineWidth = 2;
+      ctx.shadowColor = "rgba(61,43,31,0.45)";
+      ctx.shadowBlur = 0;
+      ctx.shadowOffsetY = 4;
+      ctx.fillStyle = "#3d2b1f";
+      ctx.strokeStyle = "#3d2b1f";
+      ctx.lineWidth = 3;
       ctx.beginPath();
       ctx.arc(t.x, t.y, 15, 0, Math.PI * 2);
       ctx.fill();
       ctx.stroke();
-      // barrel
-      ctx.translate(t.x, t.y);
-      ctx.rotate(t.angle);
-      ctx.fillStyle = def.color;
-      ctx.fillRect(0, -3, 18, 6);
+      ctx.shadowOffsetY = 0;
+      ctx.fillStyle = "#f3e9d2";
+      ctx.strokeStyle = "#3d2b1f";
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.arc(t.x, t.y, 14, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.stroke();
+      ctx.strokeStyle = "#b8860b";
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.arc(t.x, t.y, 10.5, 0, Math.PI * 2);
+      ctx.stroke();
+      const glyphs = { archer: "🏹", frost: "❄️", inferno: "🔥", tesla: "💣", cannon: "💣" };
+      ctx.fillStyle = "#3d2b1f";
+      ctx.font = "16px sans-serif";
+      ctx.textAlign = "center";
+      ctx.textBaseline = "middle";
+      ctx.fillText(glyphs[t.id] || "💣", t.x, t.y + 1);
       ctx.restore();
       // level pips
-      ctx.fillStyle = "#f59e0b";
+      ctx.fillStyle = "#b8860b";
       for (let i = 0; i < t.level; i++) {
         ctx.beginPath();
         ctx.arc(t.x - 8 + i * 6, t.y + 20, 2, 0, Math.PI * 2);
@@ -921,10 +929,10 @@ export default class GameEngine {
     const hx = this.hero.x;
     const hy = this.hero.y;
     ctx.save();
-    ctx.shadowColor = "#f59e0b";
-    ctx.shadowBlur = 18;
-    ctx.fillStyle = "#f59e0b";
-    ctx.strokeStyle = "#fff7ed";
+    ctx.shadowColor = "rgba(61,43,31,0.4)";
+    ctx.shadowBlur = 0;
+    ctx.fillStyle = "#b8860b";
+    ctx.strokeStyle = "#3d2b1f";
     ctx.lineWidth = 2;
     ctx.beginPath();
     ctx.moveTo(hx, hy - 14);
@@ -937,7 +945,7 @@ export default class GameEngine {
     ctx.restore();
     // move indicator
     if (this.hero.moveTo) {
-      ctx.strokeStyle = "rgba(245,158,11,0.5)";
+      ctx.strokeStyle = "rgba(139,38,38,0.5)";
       ctx.lineWidth = 1;
       ctx.beginPath();
       ctx.arc(this.hero.moveTo.x, this.hero.moveTo.y, 8, 0, Math.PI * 2);
@@ -948,20 +956,24 @@ export default class GameEngine {
   _drawCreeps(ctx) {
     for (const c of this.creeps) {
       ctx.save();
-      if (c.slowMul < 1) ctx.shadowColor = "#38bdf8";
-      else if (c.burnT > 0) ctx.shadowColor = "#f97316";
-      else ctx.shadowColor = c.color;
-      ctx.shadowBlur = c.boss ? 22 : 10;
-      ctx.fillStyle = c.slowMul === 0 ? "#7dd3fc" : c.color;
-      ctx.strokeStyle = "rgba(255,255,255,0.6)";
-      ctx.lineWidth = c.boss ? 3 : 1.5;
+      ctx.shadowColor = "rgba(61,43,31,0.4)";
+      ctx.shadowBlur = 0;
+      ctx.shadowOffsetY = 3;
+      ctx.fillStyle = "#f3e9d2";
+      ctx.strokeStyle = "#3d2b1f";
+      ctx.lineWidth = c.boss ? 3 : 2;
       ctx.beginPath();
       ctx.arc(c.x, c.y, c.radius, 0, Math.PI * 2);
       ctx.fill();
       ctx.stroke();
       ctx.restore();
+      ctx.fillStyle = "#3d2b1f";
+      ctx.font = `${c.boss ? 20 : 14}px sans-serif`;
+      ctx.textAlign = "center";
+      ctx.textBaseline = "middle";
+      ctx.fillText(c.boss ? "💀" : "👾", c.x, c.y);
       if (c.burnT > 0) {
-        ctx.fillStyle = "rgba(249,115,22,0.8)";
+        ctx.fillStyle = "#8b2626";
         ctx.beginPath();
         ctx.arc(c.x + c.radius * 0.5, c.y - c.radius * 0.5, 2.5, 0, Math.PI * 2);
         ctx.fill();
@@ -969,25 +981,22 @@ export default class GameEngine {
       // hp bar
       const bw = c.radius * 2.2;
       const hpPct = Math.max(0, c.hp / c.maxHp);
-      ctx.fillStyle = "rgba(0,0,0,0.6)";
+      ctx.fillStyle = "#f3e9d2";
+      ctx.strokeStyle = "#3d2b1f";
+      ctx.lineWidth = 1;
       ctx.fillRect(c.x - bw / 2, c.y - c.radius - 9, bw, 4);
-      ctx.fillStyle = hpPct > 0.5 ? "#10b981" : hpPct > 0.25 ? "#f59e0b" : "#ef4444";
+      ctx.strokeRect(c.x - bw / 2, c.y - c.radius - 9, bw, 4);
+      ctx.fillStyle = "#8b2626";
       ctx.fillRect(c.x - bw / 2, c.y - c.radius - 9, bw * hpPct, 4);
-      if (c.boss) {
-        ctx.fillStyle = "#f43f5e";
-        ctx.font = "bold 10px 'JetBrains Mono', monospace";
-        ctx.textAlign = "center";
-        ctx.fillText("BOSS", c.x, c.y - c.radius - 13);
-      }
     }
   }
 
   _drawProjectiles(ctx) {
     for (const pr of this.projectiles) {
       ctx.save();
-      ctx.shadowColor = pr.color;
-      ctx.shadowBlur = 10;
-      ctx.fillStyle = pr.color;
+      ctx.shadowColor = "rgba(139,38,38,0.45)";
+      ctx.shadowBlur = 3;
+      ctx.fillStyle = "#8b2626";
       ctx.beginPath();
       ctx.arc(pr.x, pr.y, pr.r, 0, Math.PI * 2);
       ctx.fill();
