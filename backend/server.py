@@ -1,23 +1,39 @@
-from fastapi import FastAPI, APIRouter, Query
-from dotenv import load_dotenv
-from starlette.middleware.cors import CORSMiddleware
-from motor.motor_asyncio import AsyncIOMotorClient
-import os
+import hashlib
+import hmac
+import json
 import logging
-from pathlib import Path
-from pydantic import BaseModel, Field, ConfigDict
-from typing import List, Optional, Dict, Any
+import os
 import uuid
 from datetime import datetime, timezone
+from pathlib import Path
+from typing import Any, Dict, List, Optional
+
+from dotenv import load_dotenv
+from fastapi import APIRouter, FastAPI, HTTPException, Query, Request
+from motor.motor_asyncio import AsyncIOMotorClient
+from pydantic import BaseModel, ConfigDict, Field
+from starlette.middleware.cors import CORSMiddleware
+
+try:
+    import stripe  # type: ignore
+except Exception:  # pragma: no cover
+    stripe = None  # type: ignore
 
 
 ROOT_DIR = Path(__file__).parent
 load_dotenv(ROOT_DIR / '.env')
 
+STRIPE_WEBHOOK_SECRET = os.environ.get('STRIPE_WEBHOOK_SECRET', 'whsec_test')
+OFFERWALL_SECRET = os.environ.get('OFFERWALL_SECRET', 'offer-secret')
+
 # MongoDB connection
-mongo_url = os.environ['MONGO_URL']
-client = AsyncIOMotorClient(mongo_url)
-db = client[os.environ['DB_NAME']]
+mongo_url = os.environ.get('MONGO_URL')
+if mongo_url:
+    client = AsyncIOMotorClient(mongo_url)
+    db = client[os.environ.get('DB_NAME', 'aegis')]
+else:
+    client = None
+    db = None
 
 app = FastAPI(title="Aegis Rogue API")
 api_router = APIRouter(prefix="/api")
@@ -124,6 +140,78 @@ async def txn_summary():
     pipeline = [{"$group": {"_id": "$event_type", "count": {"$sum": 1}}}]
     rows = await db.transactions.aggregate(pipeline).to_list(100)
     return {"by_event": {r["_id"]: r["count"] for r in rows}}
+
+
+def _offerwall_signature(payload: str) -> str:
+    return hmac.new(OFFERWALL_SECRET.encode(), payload.encode(), hashlib.sha256).hexdigest()
+
+
+@api_router.post("/monetization/offerwall-postback")
+async def offerwall_postback(payload: Dict[str, Any]):
+    user_id = str(payload.get("user_id", "")).strip()
+    currency = str(payload.get("currency", "")).strip()
+    tx_id = str(payload.get("id", "")).strip()
+    verifier = str(payload.get("verifier", "")).strip()
+    if not user_id or not currency or not tx_id:
+        raise HTTPException(status_code=400, detail="missing offerwall fields")
+
+    expected = _offerwall_signature(f"{user_id}:{currency}:{tx_id}")
+    if not hmac.compare_digest(verifier, expected):
+        raise HTTPException(status_code=401, detail="invalid signature")
+
+    tx_key = f"offerwall:{tx_id}"
+    if db is not None:
+        existing = await db.processed_transactions.update_one(
+            {"_id": tx_key},
+            {"$setOnInsert": {"provider": "offerwall", "tx_id": tx_id, "user_id": user_id, "currency": currency, "created_at": now_iso()}},
+            upsert=True,
+        )
+        if getattr(existing, "matched_count", 0) == 0:
+            await db.users.find_one_and_update(
+                {"_id": user_id},
+                {"$inc": {currency: 1}},
+                upsert=True,
+            )
+    return {"status": "ok", "user_id": user_id, "currency": currency, "tx_id": tx_id}
+
+
+@api_router.post("/monetization/stripe-webhook")
+async def stripe_webhook(request: Request):
+    if stripe is None:
+        raise HTTPException(status_code=503, detail="stripe SDK not configured")
+
+    payload = await request.body()
+    signature = request.headers.get('Stripe-Signature', '')
+    try:
+        event = stripe.Webhook.construct_event(payload, signature, STRIPE_WEBHOOK_SECRET)
+    except Exception as exc:  # pragma: no cover
+        raise HTTPException(status_code=400, detail=f"invalid signature: {exc}") from exc
+
+    if event.type != 'checkout.session.completed':
+        return {"status": "ok", "event": event.type}
+
+    session = event.data.object
+    metadata = getattr(session, 'metadata', None) or {}
+    player_id = str(metadata.get('player_id') or metadata.get('user_id') or 'anon')
+    gems = int(metadata.get('gems') or 0)
+    unlock_id = metadata.get('unlock_id') or 'unknown'
+    session_id = getattr(session, 'id', 'session_test')
+    tx_key = f"stripe:{event.type}:{session_id}"
+
+    if db is not None:
+        existing = await db.processed_transactions.update_one(
+            {"_id": tx_key},
+            {"$setOnInsert": {"provider": "stripe", "tx_id": session_id, "event_type": event.type, "player_id": player_id, "gems": gems, "unlock_id": unlock_id, "created_at": now_iso()}},
+            upsert=True,
+        )
+        if getattr(existing, "matched_count", 0) == 0:
+            await db.users.find_one_and_update(
+                {"_id": player_id},
+                {"$inc": {"gems": gems}},
+                upsert=True,
+            )
+
+    return {"status": "ok", "player_id": player_id, "gems": gems, "unlock_id": unlock_id}
 
 
 app.include_router(api_router)

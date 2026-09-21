@@ -1,5 +1,5 @@
 // Aegis Rogue - 60fps HTML5 Canvas tower defense engine (framework agnostic).
-import { WORLD_W, WORLD_H, GRID, PATH, TOWERS, HERO_ABILITIES, CREEPS, MAX_WAVE, buildWave } from "./config";
+import { WORLD_W, WORLD_H, GRID, generateLevelPath, TOWERS, HERO_ABILITIES, CREEPS, MAX_WAVE, buildWave, TOWER_SPECIALIZATIONS } from "./config";
 import audio from "./audio";
 
 function dist(ax, ay, bx, by) {
@@ -17,6 +17,34 @@ function distToSeg(px, py, ax, ay, bx, by) {
   return dist(px, py, ax + t * dx, ay + t * dy);
 }
 
+class KingdomDefender {
+  constructor(def, spot, totalMaxSlots = 6) {
+    this.id = def.id;
+    this.x = spot.x;
+    this.y = spot.y;
+    this.spotKey = spot.key;
+    this.level = 1;
+    this.cd = 0;
+    this.invested = def.cost;
+    this.angle = 0;
+    this.specialization = null;
+    this.maxHp = def.maxHp || 100;
+    this.hp = this.maxHp;
+    this.totalMaxSlots = totalMaxSlots;
+    this.dead = false;
+    this.cleaningUntil = 0;
+    this.towerColor = def.color || '#00f0ff';
+  }
+
+  takeDamage(amount) {
+    this.hp = Math.max(0, this.hp - amount);
+    if (this.hp <= 0) {
+      this.dead = true;
+      this.cleaningUntil = performance.now() + 10000;
+    }
+  }
+}
+
 export default class GameEngine {
   constructor(canvas, hooks = {}) {
     this.canvas = canvas;
@@ -26,9 +54,6 @@ export default class GameEngine {
     this.scale = 1;
     this.offX = 0;
     this.offY = 0;
-
-    this._precomputePath();
-    this._precomputeSpots();
 
     this.reset();
 
@@ -40,17 +65,24 @@ export default class GameEngine {
   }
 
   // ---------- setup ----------
+  _setActivePath(level) {
+    this.activePath = generateLevelPath(level, WORLD_W, WORLD_H);
+    this._precomputePath();
+    this._precomputeSpots();
+    if (this.gs) this.gs.activePath = this.activePath.map((point) => ({ ...point }));
+  }
+
   _precomputePath() {
     this.pathLen = 0;
     this.segs = [];
-    for (let i = 0; i < PATH.length - 1; i++) {
-      const a = PATH[i];
-      const b = PATH[i + 1];
+    for (let i = 0; i < this.activePath.length - 1; i++) {
+      const a = this.activePath[i];
+      const b = this.activePath[i + 1];
       const len = dist(a.x, a.y, b.x, b.y);
       this.segs.push({ a, b, len, start: this.pathLen });
       this.pathLen += len;
     }
-    this.base = PATH[PATH.length - 1];
+    this.base = this.activePath[this.activePath.length - 1];
   }
 
   pointAt(d) {
@@ -96,7 +128,9 @@ export default class GameEngine {
       gameSpeed: 1,
       paused: false,
       perks: [],
+      activePath: [],
     };
+    this._setActivePath(1);
     this.mods = {
       rangeMul: 1,
       damageMul: 1,
@@ -113,10 +147,18 @@ export default class GameEngine {
     this.baseMaxTowers = 6;
     this.creeps = [];
     this.towers = [];
+    this.defenders = [];
     this.projectiles = [];
     this.particles = [];
     this.floaters = [];
     this.arcs = [];
+    this.hiddenLocks = {
+      graverobber: false,
+      overcharger: false,
+      necroparasite: false,
+      energyUses: 0,
+      goldHoard: 0,
+    };
     this.hero = { x: this.base.x - 120, y: this.base.y - 60, target: null, cooldowns: { nuke: 0, freeze: 0, heal: 0 }, atkCd: 0 };
     this.selectedTower = null; // tower id to place
     this.selectedPlaced = null; // placed tower ref
@@ -126,6 +168,11 @@ export default class GameEngine {
     this._lastWaveLoot = { gold: 0, gems: 0 };
     this._pendingLoot = { gold: 0, gems: 0 };
     this.freezeTimer = 0;
+    this._secretSpawnTimer = 0;
+    this._secretSpawned = { graverobber: false, overcharger: false, necroparasite: false };
+    this.energyUseCount = 0;
+    this.hordeImpactAt = Date.now() + 24 * 60 * 60 * 1000;
+    this.hordeImpactActive = false;
   }
 
   get maxTowers() {
@@ -200,6 +247,7 @@ export default class GameEngine {
 
   _towerAt(x, y) {
     for (const t of this.towers) {
+      if (t.defender && t.defender.dead) continue;
       if (dist(x, y, t.x, t.y) < 20) return t;
     }
     return null;
@@ -209,6 +257,18 @@ export default class GameEngine {
     const p = this.toWorld(clientX, clientY);
     audio.resume();
     if (this.selectedTower) {
+      const occupied = this._towerAt(p.x, p.y);
+      if (occupied && occupied.id === this.selectedTower) {
+        const merged = occupied.level + 1;
+        occupied.level = merged;
+        occupied.invested += TOWERS[this.selectedTower].cost;
+        occupied.defender = occupied.defender || { hp: 1, maxHp: 1, dead: false };
+        occupied.defender.maxHp = Math.max(occupied.defender.maxHp, 100 + merged * 20);
+        occupied.defender.hp = occupied.defender.maxHp;
+        this.hooks.onToast?.(`${TOWERS[this.selectedTower].name} merged to rank ${merged}.`);
+        this._emitState(true);
+        return;
+      }
       this._tryPlace(p.x, p.y);
       return;
     }
@@ -235,7 +295,8 @@ export default class GameEngine {
       return;
     }
     if (this.towers.length >= this.maxTowers) {
-      this.hooks.onToast?.("Max tower slots reached. Draft +slots or sell one.");
+      this.hooks.onToast?.("Max tower slots reached. Watch an ad for an emergency slot or sell one.");
+      this.hooks.onSlotBlocked?.({ kind: "max-slots" });
       return;
     }
     const def = TOWERS[this.selectedTower];
@@ -244,6 +305,8 @@ export default class GameEngine {
       return;
     }
     this.gs.gold -= def.cost;
+    const defender = new KingdomDefender(def, spot, this.maxTowers);
+    this.defenders.push(defender);
     this.towers.push({
       id: def.id,
       x: spot.x,
@@ -253,10 +316,25 @@ export default class GameEngine {
       cd: 0,
       invested: def.cost,
       angle: 0,
+      specialization: null,
+      defender,
     });
+    this.hooks.onDailyProgress?.("towersPlaced", 1);
     audio.play("place");
     this._spawnParticles(spot.x, spot.y, def.color, 10);
     this._emitState(true);
+  }
+
+  applyTowerSpecialization(id) {
+    const t = this.selectedPlaced;
+    if (!t) return false;
+    const specs = TOWER_SPECIALIZATIONS[t.id] || [];
+    const spec = specs.find((item) => item.id === id);
+    if (!spec) return false;
+    t.specialization = id;
+    this.hooks.onToast?.(`${spec.name} specialization installed.`);
+    this._emitState(true);
+    return true;
   }
 
   upgradeSelected() {
@@ -281,6 +359,9 @@ export default class GameEngine {
     const refund = Math.floor(t.invested * 0.6);
     this.gs.gold += refund;
     this.towers = this.towers.filter((x) => x !== t);
+    if (t.defender) {
+      this.defenders = this.defenders.filter((d) => d !== t.defender);
+    }
     this.selectedPlaced = null;
     this.hooks.onToast?.(`Sold tower for ${refund} gold.`);
     this._emitState(true);
@@ -293,11 +374,21 @@ export default class GameEngine {
   towerStats(t) {
     const def = TOWERS[t.id];
     const lvlMul = 1 + (t.level - 1) * 0.35;
+    const spec = (TOWER_SPECIALIZATIONS[def.id] || []).find((item) => item.id === t.specialization) || {};
+    const rangeMul = spec.rangeMul || 1;
+    const damageMul = spec.damageMul || 1;
+    const fireRateMul = spec.fireRateMul || 1;
+    const slowDurMul = spec.slowDurMul || 1;
+    const splashMul = spec.splashMul || 1;
+    const chainBonus = spec.chainBonus || 0;
     return {
       def,
-      range: def.range * this.mods.rangeMul * (1 + (t.level - 1) * 0.06),
-      damage: def.damage * lvlMul * this.mods.damageMul,
-      fireRate: def.fireRate * this.mods.fireRateMul,
+      range: def.range * this.mods.rangeMul * rangeMul * (1 + (t.level - 1) * 0.06),
+      damage: def.damage * lvlMul * this.mods.damageMul * damageMul,
+      fireRate: def.fireRate * this.mods.fireRateMul * fireRateMul,
+      slowDur: def.slowDur ? def.slowDur * this.mods.slowDurMul * slowDurMul : undefined,
+      splash: def.splash ? def.splash * this.mods.splashMul * splashMul : 0,
+      chain: def.chain ? def.chain + chainBonus : undefined,
     };
   }
 
@@ -305,6 +396,12 @@ export default class GameEngine {
   startWave() {
     if (this.gs.waveStatus === "active" || this.gs.waveStatus === "defeat" || this.gs.waveStatus === "victory") return;
     this.gs.wave += 1;
+    this._setActivePath(this.gs.wave);
+    this.creeps = [];
+    this.projectiles = [];
+    this.particles = [];
+    this.floaters = [];
+    this.arcs = [];
     const conf = buildWave(this.gs.wave);
     this._waveConf = conf;
     this._spawnQueue = [...conf.spawns];
@@ -341,7 +438,63 @@ export default class GameEngine {
       burnT: 0,
       burnDps: 0,
       name: c.name,
+      kind: "normal",
     });
+  }
+
+  _spawnHiddenCreep(kind) {
+    const effectiveKind = kind === 'galvanized' ? 'overcharger' : kind === 'parasite' ? 'necroparasite' : kind;
+    const spawn = this.pointAt(Math.min(this.pathLen * 0.3, this.pathLen - 12));
+    const base = {
+      x: spawn.x,
+      y: spawn.y,
+      d: this.pathLen * 0.3,
+      hp: 150,
+      maxHp: 150,
+      speed: 70,
+      reward: 70,
+      leak: 8,
+      radius: 13,
+      color: '#facc15',
+      boss: false,
+      slowT: 0,
+      slowMul: 1,
+      burnT: 0,
+      burnDps: 0,
+      name: effectiveKind,
+      kind: effectiveKind,
+      key: effectiveKind,
+    };
+    if (effectiveKind === 'graverobber') {
+      base.color = '#facc15';
+      base.hp = 180; base.maxHp = 180; base.speed = 62; base.reward = 90; base.leak = 10; base.radius = 12;
+    } else if (effectiveKind === 'overcharger') {
+      base.color = '#60a5fa';
+      base.hp = 200; base.maxHp = 200; base.speed = 92; base.reward = 95; base.leak = 9; base.radius = 12;
+    } else if (effectiveKind === 'necroparasite') {
+      base.color = '#a855f7';
+      base.hp = 240; base.maxHp = 240; base.speed = 78; base.reward = 120; base.leak = 12; base.radius = 14;
+    }
+    this.creeps.push(base);
+    this._spawnParticles(base.x, base.y, base.color, 18);
+  }
+
+  _evaluateHiddenUnlocks() {
+    if (!this.hiddenLocks.graverobber && this.gs.gold > 2500) {
+      this.hiddenLocks.graverobber = true;
+      this._spawnHiddenCreep('graverobber');
+      this.hooks.onToast?.('The Plague Graverobber has entered the map.');
+    }
+    if (!this.hiddenLocks.overcharger && this.hiddenLocks.energyUses >= 15) {
+      this.hiddenLocks.overcharger = true;
+      this._spawnHiddenCreep('overcharger');
+      this.hooks.onToast?.('The Galvanized Ghoul is charging the lanes.');
+    }
+    if (!this.hiddenLocks.necroparasite && this.gs.wave >= 12) {
+      this.hiddenLocks.necroparasite = true;
+      this._spawnHiddenCreep('necroparasite');
+      this.hooks.onToast?.('The Necro-Parasite splits the path in two.');
+    }
   }
 
   // ---------- abilities ----------
@@ -351,12 +504,15 @@ export default class GameEngine {
       // allow heal anytime, others need active field
     }
     if (this.hero.cooldowns[id] > 0) return false;
+    this.hiddenLocks.energyUses += 1;
     if (id === "nuke") {
+      this.energyUseCount += 1;
       audio.play("nuke");
       this.creeps.forEach((c) => this._damage(c, c.boss ? 260 : 260, "#ef4444", false));
       this._spawnParticles(this.base.x - 200, WORLD_H / 2, "#ef4444", 40);
-      this.hooks.onToast?.("ORBITAL NUKE DEPLOYED!");
+      this.hooks.onToast?.("METEOR HAMMER CALLED!");
     } else if (id === "freeze") {
+      this.energyUseCount += 1;
       audio.play("frost");
       this.freezeTimer = 3.5;
       this.creeps.forEach((c) => {
@@ -368,7 +524,7 @@ export default class GameEngine {
       audio.play("reward");
       this.gs.nexusHP = Math.min(this.gs.maxNexusHP, this.gs.nexusHP + 35);
       this._addFloater(this.base.x - 30, this.base.y - 30, "+35 HP", "#10b981");
-      this.hooks.onToast?.("Nexus repaired +35 HP.");
+      this.hooks.onToast?.("Keep restored +35 HP.");
     }
     this.hero.cooldowns[id] = ab.cooldown;
     this._emitState(true);
@@ -448,6 +604,16 @@ export default class GameEngine {
 
   // ---------- combat helpers ----------
   _damage(c, amount, color, allowCrit = true) {
+    const isParasite = c.key === "parasite" || c.key === "necroparasite" || c.kind === "necroparasite" || c.kind === "parasite";
+    if (isParasite && !c.split && c.hp > 0 && c.hp - amount <= c.maxHp * 0.5) {
+      c.split = true;
+      const cloneA = { ...c, x: c.x + 8, y: c.y + 8, hp: Math.max(30, c.hp * 0.5), maxHp: Math.max(30, c.hp * 0.5), split: true, special: "parasite", key: "necroparasite", kind: "necroparasite" };
+      const cloneB = { ...c, x: c.x - 8, y: c.y - 8, hp: Math.max(30, c.hp * 0.5), maxHp: Math.max(30, c.hp * 0.5), split: true, special: "parasite", key: "necroparasite", kind: "necroparasite" };
+      this.creeps.push(cloneA, cloneB);
+      c.hp = 0;
+      this._addFloater(c.x, c.y, "SPLIT!", "#d946ef");
+      return;
+    }
     let dmg = amount;
     let crit = false;
     if (allowCrit && Math.random() < this.mods.critChance) {
@@ -464,6 +630,7 @@ export default class GameEngine {
     gold = Math.round(gold * this.mods.goldMul);
     this.gs.gold += gold;
     this._pendingLoot.gold += gold;
+    this.hooks.onDailyProgress?.("kills", 1);
     this._addFloater(c.x, c.y, `+${gold}`, "#f59e0b");
     if (Math.random() < this.mods.gemChance || c.boss) {
       const gems = c.boss ? 15 : 1;
@@ -551,6 +718,8 @@ export default class GameEngine {
       }
     }
 
+    this._evaluateHiddenUnlocks();
+
     // creeps
     for (const c of this.creeps) {
       if (c.slowT > 0) {
@@ -575,7 +744,8 @@ export default class GameEngine {
       }
     }
 
-    // towers fire
+    this.towers = this.towers.filter((t) => !t.defender || !t.defender.dead);
+    this.defenders = this.defenders.filter((d) => !d.dead);
     for (const t of this.towers) {
       t.cd -= dt;
       const st = this.towerStats(t);
@@ -631,6 +801,7 @@ export default class GameEngine {
     }
     if (this.gs.waveStatus === "active" && this._spawnQueue.length === 0 && this.creeps.length === 0) {
       this._lastWaveLoot = { ...this._pendingLoot };
+      this.hooks.onDailyProgress?.("wavesCleared", 1);
       if (this.gs.wave >= this.gs.maxWave) {
         this.gs.waveStatus = "victory";
         audio.play("victory");
@@ -679,8 +850,7 @@ export default class GameEngine {
     const def = st.def;
     if (def.kind === "frost") {
       audio.play("frost");
-      // instant AoE pulse
-      const slowDur = def.slowDur * this.mods.slowDurMul;
+      const slowDur = st.slowDur || def.slowDur * this.mods.slowDurMul;
       for (const c of this.creeps) {
         if (dist(t.x, t.y, c.x, c.y) <= st.range) {
           this._damage(c, st.damage, def.color);
@@ -696,13 +866,12 @@ export default class GameEngine {
       let cur = target;
       const hit = new Set();
       let prev = { x: t.x, y: t.y };
-      for (let i = 0; i < def.chain && cur; i++) {
+      for (let i = 0; i < (st.chain ?? def.chain) && cur; i++) {
         this._damage(cur, st.damage * (1 - i * 0.12), def.color);
         if (this.mods.burnOnHit) this._applyBurn(cur);
         this.arcs.push({ x1: prev.x, y1: prev.y, x2: cur.x, y2: cur.y, life: 0.12, color: def.color });
         hit.add(cur);
         prev = { x: cur.x, y: cur.y };
-        // next nearest not hit
         let next = null;
         let nd = 90;
         for (const c of this.creeps) {
@@ -717,7 +886,6 @@ export default class GameEngine {
       }
       return;
     }
-    // projectile-based (archer / inferno)
     audio.play(def.id === "inferno" ? "inferno" : "archer");
     this.projectiles.push({
       x: t.x,
@@ -729,7 +897,7 @@ export default class GameEngine {
       damage: st.damage,
       kind: def.kind,
       color: def.color,
-      splash: def.splash ? def.splash * this.mods.splashMul : 0,
+      splash: def.splash ? st.splash ?? def.splash * this.mods.splashMul : 0,
       burn: def.burnDps ? { dps: def.burnDps, dur: def.burnDur } : null,
       r: def.kind === "splash" ? 5 : 3,
     });
@@ -768,7 +936,9 @@ export default class GameEngine {
     const w = this.canvas.width / this.dpr;
     const h = this.canvas.height / this.dpr;
     ctx.clearRect(0, 0, w, h);
-    ctx.fillStyle = "#dfd0b0";
+    const hordeActive = Date.now() >= this.hordeImpactAt;
+    this.hordeImpactActive = hordeActive;
+    ctx.fillStyle = hordeActive ? "#050005" : "#0a0017";
     ctx.fillRect(0, 0, w, h);
 
     ctx.save();
@@ -792,7 +962,7 @@ export default class GameEngine {
   }
 
   _drawGrid(ctx) {
-    ctx.strokeStyle = "rgba(255,255,255,0.03)";
+    ctx.strokeStyle = "#2a085c";
     ctx.lineWidth = 1;
     for (let x = 0; x <= WORLD_W; x += GRID) {
       ctx.beginPath();
@@ -813,8 +983,8 @@ export default class GameEngine {
       const occupied = this.towers.some((t) => t.spotKey === s.key);
       if (occupied) continue;
       if (this.selectedTower) {
-        ctx.fillStyle = "rgba(184,134,11,0.08)";
-        ctx.strokeStyle = "rgba(61,43,31,0.35)";
+        ctx.fillStyle = "rgba(0,240,255,0.08)";
+        ctx.strokeStyle = "rgba(0,240,255,0.45)";
         ctx.lineWidth = 1;
         ctx.beginPath();
         ctx.arc(s.x, s.y, 15, 0, Math.PI * 2);
@@ -827,23 +997,24 @@ export default class GameEngine {
   _drawPath(ctx) {
     ctx.lineJoin = "round";
     ctx.lineCap = "round";
-    ctx.strokeStyle = "#3d2b1f";
-    ctx.lineWidth = 36;
+    const isImpact = this.hordeImpactActive;
+    ctx.save();
+    ctx.shadowBlur = 15;
+    ctx.shadowColor = isImpact ? "#ff0055" : "#ff007f";
+    ctx.strokeStyle = isImpact ? "#ff0055" : "#ff007f";
+    ctx.lineWidth = 10;
     this._pathStroke(ctx);
-    ctx.strokeStyle = "#cbba95";
-    ctx.lineWidth = 28;
+    ctx.shadowBlur = 0;
+    ctx.strokeStyle = isImpact ? "#ff3366" : "#ff66b3";
+    ctx.lineWidth = 3;
     this._pathStroke(ctx);
-    ctx.setLineDash([8, 8]);
-    ctx.strokeStyle = "rgba(61,43,31,0.4)";
-    ctx.lineWidth = 2;
-    this._pathStroke(ctx);
-    ctx.setLineDash([]);
+    ctx.restore();
   }
 
   _pathStroke(ctx) {
     ctx.beginPath();
-    ctx.moveTo(PATH[0].x, PATH[0].y);
-    for (let i = 1; i < PATH.length; i++) ctx.lineTo(PATH[i].x, PATH[i].y);
+    ctx.moveTo(this.activePath[0].x, this.activePath[0].y);
+    for (let i = 1; i < this.activePath.length; i++) ctx.lineTo(this.activePath[i].x, this.activePath[i].y);
     ctx.stroke();
   }
 
@@ -851,18 +1022,17 @@ export default class GameEngine {
     const b = this.base;
     const pulse = 0.5 + Math.sin(performance.now() / 300) * 0.2;
     ctx.save();
-    ctx.shadowColor = "rgba(61,43,31,0.4)";
-    ctx.shadowBlur = 0;
-    ctx.shadowOffsetY = 4;
-    ctx.fillStyle = "#f3e9d2";
-    ctx.strokeStyle = "#3d2b1f";
+    ctx.shadowColor = "#ff007f";
+    ctx.shadowBlur = 15;
+    ctx.fillStyle = "#1f003b";
+    ctx.strokeStyle = "#ff007f";
     ctx.lineWidth = 3;
     ctx.beginPath();
     ctx.arc(b.x, b.y, 26, 0, Math.PI * 2);
     ctx.fill();
     ctx.stroke();
     ctx.shadowBlur = 0;
-    ctx.fillStyle = `rgba(139,38,38,${pulse})`;
+    ctx.fillStyle = `rgba(255,230,0,${pulse})`;
     ctx.beginPath();
     ctx.arc(b.x, b.y, 12, 0, Math.PI * 2);
     ctx.fill();
@@ -874,49 +1044,65 @@ export default class GameEngine {
       const st = this.towerStats(t);
       const selected = this.selectedPlaced === t;
       if (selected) {
-        ctx.strokeStyle = "#8b2626";
+        ctx.strokeStyle = "#00f0ff";
+        ctx.shadowColor = "#00f0ff";
+        ctx.shadowBlur = 12;
         ctx.globalAlpha = 0.75;
         ctx.setLineDash([8, 8]);
         ctx.lineWidth = 2;
         ctx.beginPath();
         ctx.arc(t.x, t.y, st.range, 0, Math.PI * 2);
         ctx.stroke();
+        ctx.shadowBlur = 0;
         ctx.setLineDash([]);
         ctx.globalAlpha = 1;
       }
+      const defender = t.defender || { hp: 1, maxHp: 1, dead: false };
+      const healthRatio = Math.max(0, defender.hp / defender.maxHp);
       ctx.save();
-      ctx.shadowColor = "rgba(61,43,31,0.45)";
-      ctx.shadowBlur = 0;
-      ctx.shadowOffsetY = 4;
-      ctx.fillStyle = "#3d2b1f";
-      ctx.strokeStyle = "#3d2b1f";
+      ctx.shadowColor = "#00f0ff";
+      ctx.shadowBlur = 10;
+      ctx.fillStyle = "#1f003b";
+      ctx.strokeStyle = "#00f0ff";
       ctx.lineWidth = 3;
       ctx.beginPath();
       ctx.arc(t.x, t.y, 15, 0, Math.PI * 2);
       ctx.fill();
       ctx.stroke();
-      ctx.shadowOffsetY = 0;
-      ctx.fillStyle = "#f3e9d2";
-      ctx.strokeStyle = "#3d2b1f";
+      ctx.shadowBlur = 0;
+      ctx.fillStyle = "#1f003b";
+      ctx.strokeStyle = "#ffea00";
       ctx.lineWidth = 2;
       ctx.beginPath();
       ctx.arc(t.x, t.y, 14, 0, Math.PI * 2);
       ctx.fill();
       ctx.stroke();
-      ctx.strokeStyle = "#b8860b";
+      ctx.strokeStyle = "#00f0ff";
+      ctx.shadowColor = "#00f0ff";
+      ctx.shadowBlur = 8;
       ctx.lineWidth = 2;
       ctx.beginPath();
       ctx.arc(t.x, t.y, 10.5, 0, Math.PI * 2);
       ctx.stroke();
-      const glyphs = { archer: "🏹", frost: "❄️", inferno: "🔥", tesla: "💣", cannon: "💣" };
-      ctx.fillStyle = "#3d2b1f";
+      ctx.shadowBlur = 0;
+      ctx.fillStyle = "#00f0ff";
       ctx.font = "16px sans-serif";
       ctx.textAlign = "center";
       ctx.textBaseline = "middle";
-      ctx.fillText(glyphs[t.id] || "💣", t.x, t.y + 1);
+      ctx.fillText(t.id === 'archer' ? '🏹' : t.id === 'frost' ? '❄️' : t.id === 'inferno' ? '🔥' : '⚡', t.x, t.y + 1);
       ctx.restore();
-      // level pips
-      ctx.fillStyle = "#b8860b";
+
+      const barX = t.x - 18;
+      const barY = t.y - 28;
+      ctx.fillStyle = '#120021';
+      ctx.fillRect(barX, barY, 36, 5);
+      const healthColor = healthRatio > 0.65 ? '#39FF14' : healthRatio > 0.3 ? '#FFB000' : '#FF3366';
+      ctx.fillStyle = healthColor;
+      ctx.fillRect(barX, barY, 36 * healthRatio, 5);
+      ctx.strokeStyle = '#dfe7ff';
+      ctx.strokeRect(barX, barY, 36, 5);
+
+      ctx.fillStyle = '#ffea00';
       for (let i = 0; i < t.level; i++) {
         ctx.beginPath();
         ctx.arc(t.x - 8 + i * 6, t.y + 20, 2, 0, Math.PI * 2);
@@ -929,10 +1115,10 @@ export default class GameEngine {
     const hx = this.hero.x;
     const hy = this.hero.y;
     ctx.save();
-    ctx.shadowColor = "rgba(61,43,31,0.4)";
-    ctx.shadowBlur = 0;
-    ctx.fillStyle = "#b8860b";
-    ctx.strokeStyle = "#3d2b1f";
+    ctx.shadowColor = "#00f0ff";
+    ctx.shadowBlur = 20;
+    ctx.fillStyle = "#00f0ff";
+    ctx.strokeStyle = "#eaffff";
     ctx.lineWidth = 2;
     ctx.beginPath();
     ctx.moveTo(hx, hy - 14);
@@ -942,10 +1128,26 @@ export default class GameEngine {
     ctx.closePath();
     ctx.fill();
     ctx.stroke();
+    ctx.shadowBlur = 0;
+    ctx.strokeStyle = "#00f0ff";
+    ctx.lineWidth = 1.5;
+    ctx.beginPath();
+    ctx.arc(hx, hy, 20 + Math.sin(performance.now() / 160) * 3, 0, Math.PI * 2);
+    ctx.stroke();
+    ctx.beginPath();
+    ctx.moveTo(hx - 22, hy);
+    ctx.lineTo(hx - 14, hy);
+    ctx.moveTo(hx + 14, hy);
+    ctx.lineTo(hx + 22, hy);
+    ctx.moveTo(hx, hy - 22);
+    ctx.lineTo(hx, hy - 14);
+    ctx.moveTo(hx, hy + 14);
+    ctx.lineTo(hx, hy + 22);
+    ctx.stroke();
     ctx.restore();
     // move indicator
     if (this.hero.moveTo) {
-      ctx.strokeStyle = "rgba(139,38,38,0.5)";
+      ctx.strokeStyle = "rgba(0,240,255,0.7)";
       ctx.lineWidth = 1;
       ctx.beginPath();
       ctx.arc(this.hero.moveTo.x, this.hero.moveTo.y, 8, 0, Math.PI * 2);
@@ -955,38 +1157,60 @@ export default class GameEngine {
 
   _drawCreeps(ctx) {
     for (const c of this.creeps) {
+      const creepColor = c.boss ? "#ffe600" : c.key === "brute" ? "#ff0055" : c.kind === 'graverobber' ? '#facc15' : c.kind === 'overcharger' ? '#60a5fa' : c.kind === 'necroparasite' || c.key === 'necroparasite' ? '#a855f7' : '#39ff14';
       ctx.save();
-      ctx.shadowColor = "rgba(61,43,31,0.4)";
-      ctx.shadowBlur = 0;
-      ctx.shadowOffsetY = 3;
-      ctx.fillStyle = "#f3e9d2";
-      ctx.strokeStyle = "#3d2b1f";
-      ctx.lineWidth = c.boss ? 3 : 2;
+      ctx.shadowColor = creepColor;
+      ctx.shadowBlur = 12;
+      ctx.fillStyle = c.boss ? '#ffe600' : c.key === 'brute' ? '#ff7f50' : c.kind === 'graverobber' ? '#facc15' : c.kind === 'overcharger' ? '#60a5fa' : c.kind === 'necroparasite' || c.key === 'necroparasite' ? '#a855f7' : '#39ff14';
+      ctx.strokeStyle = creepColor;
+      ctx.lineWidth = c.boss ? 3 : 2.5;
       ctx.beginPath();
-      ctx.arc(c.x, c.y, c.radius, 0, Math.PI * 2);
+      if (c.boss) {
+        ctx.moveTo(c.x - 18, c.y + 16);
+        ctx.lineTo(c.x - 10, c.y - 18);
+        ctx.lineTo(c.x, c.y - 28);
+        ctx.lineTo(c.x + 10, c.y - 18);
+        ctx.lineTo(c.x + 18, c.y + 16);
+        ctx.closePath();
+      } else {
+        ctx.arc(c.x, c.y, c.radius, 0, Math.PI * 2);
+      }
       ctx.fill();
       ctx.stroke();
+      ctx.shadowBlur = 0;
+      ctx.fillStyle = '#f8fafc';
+      ctx.fillRect(c.x - 8, c.y - 4, 5, 5);
+      ctx.fillRect(c.x + 3, c.y - 4, 5, 5);
+      ctx.fillStyle = '#050505';
+      ctx.fillRect(c.x - 8, c.y + 5, 16, 6);
       ctx.restore();
-      ctx.fillStyle = "#3d2b1f";
-      ctx.font = `${c.boss ? 20 : 14}px sans-serif`;
-      ctx.textAlign = "center";
-      ctx.textBaseline = "middle";
-      ctx.fillText(c.boss ? "💀" : "👾", c.x, c.y);
+
+      if (c.boss || c.kind === 'overcharger' || c.kind === 'necroparasite' || c.key === 'necroparasite') {
+        ctx.save();
+        ctx.fillStyle = c.kind === 'necroparasite' || c.key === 'necroparasite' ? '#f5d0fe' : '#00d9ff';
+        ctx.shadowColor = '#00d9ff';
+        ctx.shadowBlur = 12;
+        ctx.beginPath();
+        ctx.arc(c.x - 7, c.y - 8, 2, 0, Math.PI * 2);
+        ctx.arc(c.x + 7, c.y - 8, 2, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.restore();
+      }
+
       if (c.burnT > 0) {
-        ctx.fillStyle = "#8b2626";
+        ctx.fillStyle = '#ff0055';
         ctx.beginPath();
         ctx.arc(c.x + c.radius * 0.5, c.y - c.radius * 0.5, 2.5, 0, Math.PI * 2);
         ctx.fill();
       }
-      // hp bar
       const bw = c.radius * 2.2;
       const hpPct = Math.max(0, c.hp / c.maxHp);
-      ctx.fillStyle = "#f3e9d2";
-      ctx.strokeStyle = "#3d2b1f";
+      ctx.fillStyle = '#120021';
+      ctx.strokeStyle = '#00f0ff';
       ctx.lineWidth = 1;
       ctx.fillRect(c.x - bw / 2, c.y - c.radius - 9, bw, 4);
       ctx.strokeRect(c.x - bw / 2, c.y - c.radius - 9, bw, 4);
-      ctx.fillStyle = "#8b2626";
+      ctx.fillStyle = '#ff0055';
       ctx.fillRect(c.x - bw / 2, c.y - c.radius - 9, bw * hpPct, 4);
     }
   }
@@ -994,12 +1218,14 @@ export default class GameEngine {
   _drawProjectiles(ctx) {
     for (const pr of this.projectiles) {
       ctx.save();
-      ctx.shadowColor = "rgba(139,38,38,0.45)";
-      ctx.shadowBlur = 3;
-      ctx.fillStyle = "#8b2626";
+      const boltColor = pr.kind === "splash" ? "#ffea00" : "#00f0ff";
+      ctx.shadowColor = boltColor;
+      ctx.shadowBlur = 20;
+      ctx.fillStyle = boltColor;
       ctx.beginPath();
       ctx.arc(pr.x, pr.y, pr.r, 0, Math.PI * 2);
       ctx.fill();
+      ctx.shadowBlur = 0;
       ctx.restore();
     }
   }
@@ -1063,8 +1289,8 @@ export default class GameEngine {
     const cy = spot ? spot.y : this._hover.y;
     ctx.save();
     ctx.globalAlpha = 0.5;
-    ctx.strokeStyle = valid ? def.color : "#ef4444";
-    ctx.fillStyle = valid ? "rgba(6,182,212,0.08)" : "rgba(239,68,68,0.08)";
+    ctx.strokeStyle = valid ? "#00f0ff" : "#ff0055";
+    ctx.fillStyle = valid ? "rgba(0,240,255,0.08)" : "rgba(255,0,85,0.08)";
     ctx.lineWidth = 2;
     ctx.beginPath();
     ctx.arc(cx, cy, def.range * this.mods.rangeMul, 0, Math.PI * 2);
@@ -1098,10 +1324,18 @@ export default class GameEngine {
       towersPlaced: this.towers.length,
       maxTowers: this.maxTowers,
       perks: [...this.gs.perks],
+      activePath: this.activePath.map((point) => ({ ...point })),
       heroCooldowns: { ...this.hero.cooldowns },
       lastWaveLoot: { ...this._lastWaveLoot },
       selectedPlaced: t
-        ? { id: t.id, level: t.level, upgradeCost: this._upgradeCost(t), sellRefund: Math.floor(t.invested * 0.6) }
+        ? {
+            id: t.id,
+            level: t.level,
+            specialization: t.specialization || null,
+            upgradeCost: this._upgradeCost(t),
+            sellRefund: Math.floor(t.invested * 0.6),
+            specializations: (TOWER_SPECIALIZATIONS[t.id] || []).map((spec) => ({ ...spec, active: t.specialization === spec.id })),
+          }
         : null,
     });
   }
@@ -1129,6 +1363,7 @@ export default class GameEngine {
     if (!s || !s.gs) return false;
     try {
       Object.assign(this.gs, s.gs);
+      this._setActivePath(this.gs.wave || 1);
       if (this.gs.waveStatus === "active") this.gs.waveStatus = "cleared";
       if (this.gs.waveStatus === "defeat" || this.gs.waveStatus === "victory") this.gs.waveStatus = "idle";
       Object.assign(this.mods, s.mods || {});

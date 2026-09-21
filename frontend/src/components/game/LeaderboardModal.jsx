@@ -27,7 +27,7 @@ export default function LeaderboardModal({ onClose }) {
           {rows === null ? (
             <p className="text-center text-zinc-500 py-8 text-sm">Loading rankings...</p>
           ) : rows.length === 0 ? (
-            <p className="text-center text-zinc-500 py-8 text-sm">No scores yet. Be the first legend to defend the Nexus!</p>
+            <p className="text-center text-zinc-500 py-8 text-sm">No scores yet. Be the first legend to defend the Keep!</p>
           ) : (
             <div className="flex flex-col gap-1.5">
               {rows.map((r, i) => (

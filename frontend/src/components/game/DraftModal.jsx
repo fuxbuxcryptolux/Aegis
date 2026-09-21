@@ -17,7 +17,7 @@ export default function DraftModal({ cards, onPick, onReroll, rerollsUsed }) {
             <span className="text-[10px] font-mono uppercase tracking-[0.25em] text-cyan-400">Wave Cleared</span>
           </div>
           <h2 className="font-display font-black text-3xl sm:text-4xl uppercase tracking-tight text-white text-glow-cyan">
-            Select Tactical Protocol
+            Select a Blessing
           </h2>
           <p className="text-sm text-zinc-400 mt-1">Draft one permanent upgrade for this run</p>
         </div>
@@ -65,7 +65,7 @@ export default function DraftModal({ cards, onPick, onReroll, rerollsUsed }) {
             className="flex items-center gap-2 px-5 py-3 rounded-xl bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-400 hover:to-amber-500 text-slate-950 font-bold transition-all neon-amber"
           >
             <RefreshCw className="w-4 h-4" />
-            Reroll Protocol
+            Reroll Blessings
             <span className="flex items-center gap-1 text-xs bg-slate-950/30 px-2 py-0.5 rounded-full">
               <Play className="w-3 h-3" /> Watch Ad
             </span>

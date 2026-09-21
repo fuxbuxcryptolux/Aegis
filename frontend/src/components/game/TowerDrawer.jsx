@@ -1,5 +1,5 @@
 import { Crosshair, Snowflake, Flame, Zap, Bomb, HeartPulse, Coins, ArrowUpCircle, Trash2, Swords, Play, X } from "lucide-react";
-import { TOWERS, TOWER_ORDER, HERO_ABILITIES, HERO_ORDER } from "@/game/config";
+import { TOWERS, TOWER_ORDER, HERO_ABILITIES, HERO_ORDER, TOWER_SPECIALIZATIONS } from "@/game/config";
 
 const TOWER_ICONS = { archer: Crosshair, frost: Snowflake, inferno: Flame, tesla: Zap };
 const HERO_ICONS = { nuke: Bomb, freeze: Snowflake, heal: HeartPulse };
@@ -65,7 +65,7 @@ function HeroButton({ id, cooldown, onCast }) {
   );
 }
 
-export default function TowerDrawer({ state, onSelectTower, onCastAbility, onStartWave, onUpgrade, onSell, onDeselect }) {
+export default function TowerDrawer({ state, onSelectTower, onCastAbility, onStartWave, onUpgrade, onSell, onDeselect, onSpecialize }) {
   const placed = state.selectedPlaced;
   const canStart = state.waveStatus === "idle" || state.waveStatus === "cleared";
 
@@ -110,6 +110,21 @@ export default function TowerDrawer({ state, onSelectTower, onCastAbility, onSta
                 <X className="w-4 h-4" />
               </button>
             </div>
+            {placed.specializations && placed.specializations.length > 0 && (
+              <div className="flex items-center gap-1.5 flex-wrap mt-2 w-full">
+                {placed.specializations.map((spec) => (
+                  <button
+                    key={spec.id}
+                    onClick={() => onSpecialize?.(spec.id)}
+                    className={`px-2 py-1 rounded-md border text-[10px] font-bold transition-colors ${
+                      spec.active ? "border-amber-400 bg-amber-500/20 text-amber-200" : "border-white/10 bg-slate-800/80 text-zinc-300 hover:border-cyan-400 hover:text-cyan-200"
+                    }`}
+                  >
+                    {spec.name}
+                  </button>
+                ))}
+              </div>
+            )}
           </div>
         ) : (
           TOWER_ORDER.map((id) => (
@@ -136,7 +151,7 @@ export default function TowerDrawer({ state, onSelectTower, onCastAbility, onSta
             className="flex flex-col items-center justify-center gap-0.5 px-3 sm:px-5 h-14 sm:h-16 rounded-xl bg-gradient-to-b from-cyan-400 to-cyan-600 text-slate-950 font-display font-black uppercase tracking-tight hover:from-cyan-300 hover:to-cyan-500 transition-all neon-cyan animate-pulse"
           >
             <Play className="w-5 h-5" fill="currentColor" />
-            <span className="text-[10px] sm:text-xs">{state.wave === 0 ? "Deploy" : "Next Wave"}</span>
+            <span className="text-[10px] sm:text-xs">{state.wave === 0 ? "Muster" : "Next Wave"}</span>
           </button>
         )}
       </div>

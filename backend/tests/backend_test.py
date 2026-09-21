@@ -2,6 +2,7 @@
 import os
 import pytest
 import requests
+from fastapi.testclient import TestClient
 
 BASE_URL = os.environ.get("REACT_APP_BACKEND_URL")
 if not BASE_URL:
@@ -111,3 +112,63 @@ def test_monetization_summary(api):
 def test_monetization_log_missing_event_type(api):
     r = api.post(f"{BASE_URL}/api/monetization/log", json={"user_id": "TEST_user"}, timeout=15)
     assert r.status_code == 422
+
+
+def test_stripe_webhook_verifies_session_and_updates_wallet(monkeypatch):
+    import backend.server as server
+
+    class FakeEvent:
+        def __init__(self):
+            self.type = "checkout.session.completed"
+            self.data = type("Data", (), {"object": {"metadata": {"player_id": "p123", "gems": "250", "unlock_id": "frost"}}})()
+
+    def fake_construct_event(payload, sig, secret):
+        assert payload == b"payload"
+        assert sig == "sig"
+        assert secret == "whsec_test"
+        return FakeEvent()
+
+    class FakeProcessed:
+        def __init__(self):
+            self.calls = []
+        async def update_one(self, filter_, update, upsert=True):
+            self.calls.append((filter_, update, upsert))
+            return type("Result", (), {"matched_count": 0, "modified_count": 0})()
+
+    server.stripe = type("S", (), {"Webhook": type("W", (), {"construct_event": staticmethod(fake_construct_event)})})()
+    server.db.processed_transactions = FakeProcessed()
+
+    class FakeUsers:
+        async def find_one_and_update(self, filter_, update, upsert=True):
+            return {"_id": "p123", "gems": 0}
+
+    server.db.users = FakeUsers()
+    client = TestClient(server.app)
+    resp = client.post(
+        "/api/monetization/stripe-webhook",
+        data=b"payload",
+        headers={"Stripe-Signature": "sig", "Content-Type": "application/json"},
+    )
+    assert resp.status_code == 200
+    assert resp.json()["status"] == "ok"
+    assert server.db.processed_transactions.calls[0][0] == {"_id": "stripe:checkout.session.completed:session_test"}
+
+
+def test_offerwall_postback_rejects_bad_signature(monkeypatch):
+    import backend.server as server
+    import hmac
+    import hashlib
+
+    secret = "offer-secret".encode()
+    payload = {"user_id": "p1", "currency": "gems", "id": "tx-1", "verifier": "abc"}
+    server.OFFERWALL_SECRET = secret.decode()
+
+    def fake_digest(data):
+        return hmac.new(secret, data.encode(), hashlib.sha256).hexdigest()
+
+    server._offerwall_signature = fake_digest
+
+    client = TestClient(server.app)
+    resp = client.post("/api/monetization/offerwall-postback", json={"user_id": "p1", "currency": "gems", "id": "tx-1", "verifier": "bad"})
+    assert resp.status_code == 401
+    assert resp.json()["detail"] == "invalid signature"

@@ -12,7 +12,7 @@ export default function StartScreen({ name, setName, onStart, hasSave, bestWave 
         </h1>
         <p className="font-condensed uppercase tracking-[0.3em] text-amber-400 text-sm sm:text-base mt-2">Tower Defense RPG</p>
         <p className="text-sm text-zinc-400 mt-4 max-w-md mx-auto">
-          Defend the Nexus across 20 escalating waves. Build towers, command your hero, and draft roguelike perks between rounds.
+          Defend the Keep across 20 escalating waves. Build towers, command your hero, and draft legendary blessings between rounds.
         </p>
 
         <div className="flex justify-center gap-3 my-6 text-[11px] font-mono uppercase tracking-wider text-zinc-500">

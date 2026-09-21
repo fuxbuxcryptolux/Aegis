@@ -9,7 +9,7 @@ export default function VictoryModal({ state, onClaim, onClaimDouble, claimedDou
           <Trophy className="w-8 h-8 text-amber-400" />
         </div>
         <h2 className="font-display font-black text-3xl uppercase tracking-tight text-amber-400 text-glow-amber">Sector Defended!</h2>
-        <p className="text-sm text-zinc-400 mt-2">You survived all {state.maxWave} waves. The Nexus stands.</p>
+        <p className="text-sm text-zinc-400 mt-2">You survived all {state.maxWave} waves. The Keep stands.</p>
 
         <div className="flex justify-center gap-4 mt-5">
           <div className="flex items-center gap-2 px-4 py-2 rounded-xl bg-slate-900/60 border border-amber-500/20">

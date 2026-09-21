@@ -4,19 +4,35 @@ export const WORLD_W = 960;
 export const WORLD_H = 560;
 export const GRID = 40;
 
-// Winding path waypoints (world coords). Enemies spawn off-screen left, reach Nexus at right.
-export const PATH = [
-  { x: -40, y: 110 },
-  { x: 210, y: 110 },
-  { x: 210, y: 300 },
-  { x: 430, y: 300 },
-  { x: 430, y: 120 },
-  { x: 660, y: 120 },
-  { x: 660, y: 440 },
-  { x: 820, y: 440 },
-  { x: 820, y: 270 },
-  { x: 1010, y: 270 },
+// Each level uses a different route through the same illustrated world.
+const LEVEL_PATHS = [
+  [
+    [-40, 100], [180, 100], [180, 250], [390, 250], [390, 430],
+    [610, 430], [610, 160], [820, 160], [820, 360], [1010, 360],
+  ],
+  [
+    [-40, 80], [170, 80], [170, 460], [370, 460], [370, 100],
+    [570, 100], [570, 460], [780, 460], [780, 260], [1010, 260],
+  ],
+  [
+    [-40, 80], [120, 80], [120, 480], [840, 480], [840, 80], [1010, 80],
+  ],
+  [
+    [-40, 280], [120, 280], [120, 100], [840, 100], [840, 460],
+    [260, 460], [260, 200], [700, 200], [700, 360], [420, 360],
+    [420, 280], [1010, 280],
+  ],
 ];
+
+export function generateLevelPath(level, canvasWidth = WORLD_W, canvasHeight = WORLD_H) {
+  const preset = LEVEL_PATHS[(Math.max(1, level) - 1) % LEVEL_PATHS.length];
+  const scaleX = canvasWidth / WORLD_W;
+  const scaleY = canvasHeight / WORLD_H;
+  return preset.map(([x, y]) => ({ x: x * scaleX, y: y * scaleY }));
+}
+
+// Backward-compatible level-one route for callers that only need a default map.
+export const PATH = generateLevelPath(1, WORLD_W, WORLD_H);
 
 export const TOWERS = {
   archer: {
@@ -65,7 +81,7 @@ export const TOWERS = {
   },
   tesla: {
     id: "tesla",
-    name: "Tesla Coil",
+    name: "Storm Spire",
     cost: 300,
     range: 125,
     damage: 26,
@@ -75,20 +91,39 @@ export const TOWERS = {
     color: "#a855f7",
     icon: "Zap",
     kind: "chain",
-    desc: "Chain lightning arcs to up to 4 targets.",
+    desc: "Storm arcs leap between up to 4 raiders.",
   },
 };
 
 export const TOWER_ORDER = ["archer", "frost", "inferno", "tesla"];
 
+export const TOWER_SPECIALIZATIONS = {
+  archer: [
+    { id: "longbow", name: "Longbow", desc: "+22% range", rangeMul: 1.22 },
+    { id: "quickdraw", name: "Quickdraw", desc: "+18% attack speed", fireRateMul: 0.82 },
+  ],
+  frost: [
+    { id: "deepfreeze", name: "Deepfreeze", desc: "+35% slow duration", slowDurMul: 1.35 },
+    { id: "glacier", name: "Glacier", desc: "+25% damage", damageMul: 1.25 },
+  ],
+  inferno: [
+    { id: "dragonfire", name: "Dragonfire", desc: "+30% damage", damageMul: 1.3 },
+    { id: "wideburst", name: "Wideburst", desc: "+35% splash radius", splashMul: 1.35 },
+  ],
+  tesla: [
+    { id: "stormchain", name: "Stormchain", desc: "+2 chain targets", chainBonus: 2 },
+    { id: "thunderhead", name: "Thunderhead", desc: "+24% damage", damageMul: 1.24 },
+  ],
+};
+
 export const HERO_ABILITIES = {
   nuke: {
     id: "nuke",
-    name: "Orbital Nuke",
+    name: "Meteor Hammer",
     cooldown: 24,
     icon: "Bomb",
     color: "#ef4444",
-    desc: "Catastrophic strike: 260 dmg to every enemy on field.",
+    desc: "A falling star deals 260 damage to every raider.",
   },
   freeze: {
     id: "freeze",
@@ -100,11 +135,11 @@ export const HERO_ABILITIES = {
   },
   heal: {
     id: "heal",
-    name: "Nanite Repair",
+    name: "Herbal Remedy",
     cooldown: 28,
     icon: "HeartPulse",
     color: "#10b981",
-    desc: "Restores 35 Nexus Base HP instantly.",
+    desc: "Restores 35 Keep Health instantly.",
   },
 };
 
@@ -116,6 +151,9 @@ export const CREEPS = {
   brute: { key: "brute", name: "Armored Brute", speed: 34, hp: 190, reward: 22, leak: 10, radius: 15, color: "#eab308" },
   phantom: { key: "phantom", name: "Void Phantom", speed: 54, hp: 95, reward: 15, leak: 6, radius: 12, color: "#c084fc" },
   boss: { key: "boss", name: "GOLIATH TITAN", speed: 22, hp: 1500, reward: 200, leak: 40, radius: 26, color: "#f43f5e", boss: true },
+  graverobber: { key: "graverobber", name: "Plague Graverobber", speed: 50, hp: 110, reward: 18, leak: 6, radius: 12, color: "#facc15" },
+  overcharger: { key: "overcharger", name: "Galvanized Ghoul", speed: 72, hp: 130, reward: 24, leak: 8, radius: 13, color: "#a5f3fc" },
+  necroparasite: { key: "necroparasite", name: "Necro-Parasite", speed: 62, hp: 170, reward: 32, leak: 9, radius: 11, color: "#d946ef" },
 };
 
 export const MAX_WAVE = 20;
@@ -144,17 +182,17 @@ export function buildWave(wave) {
 // Roguelike perk pool
 export const PERKS = [
   { id: "range", title: "Eagle Optics", desc: "+18% tower range", icon: "Radar", color: "#06b6d4", rarity: "Common", apply: (m) => (m.rangeMul *= 1.18) },
-  { id: "damage", title: "Overcharged Rounds", desc: "+18% tower damage", icon: "Swords", color: "#f59e0b", rarity: "Common", apply: (m) => (m.damageMul *= 1.18) },
-  { id: "firerate", title: "Rapid Servos", desc: "+14% attack speed", icon: "Gauge", color: "#06b6d4", rarity: "Common", apply: (m) => (m.fireRateMul *= 0.86) },
-  { id: "gold", title: "Bounty Protocol", desc: "+25% gold income", icon: "Coins", color: "#f59e0b", rarity: "Uncommon", apply: (m) => (m.goldMul *= 1.25) },
+  { id: "damage", title: "Runic Ammunition", desc: "+18% tower damage", icon: "Swords", color: "#f59e0b", rarity: "Common", apply: (m) => (m.damageMul *= 1.18) },
+  { id: "firerate", title: "Wind Runner's Haste", desc: "+14% attack speed", icon: "Gauge", color: "#06b6d4", rarity: "Common", apply: (m) => (m.fireRateMul *= 0.86) },
+  { id: "gold", title: "Bounty Charter", desc: "+25% gold income", icon: "Coins", color: "#f59e0b", rarity: "Uncommon", apply: (m) => (m.goldMul *= 1.25) },
   { id: "burn", title: "Incendiary Coating", desc: "All towers apply Burn on hit", icon: "Flame", color: "#f97316", rarity: "Rare", apply: (m) => (m.burnOnHit = true) },
-  { id: "crit", title: "Precision Targeting", desc: "+12% critical chance (2x dmg)", icon: "Target", color: "#ef4444", rarity: "Uncommon", apply: (m) => (m.critChance += 0.12) },
-  { id: "slot", title: "Extra Emplacements", desc: "+2 tower build slots", icon: "LayoutGrid", color: "#8b5cf6", rarity: "Rare", apply: (m) => (m.extraSlots += 2) },
-  { id: "hp", title: "Reinforced Nexus", desc: "+30 max Base HP (healed)", icon: "ShieldPlus", color: "#10b981", rarity: "Uncommon", apply: (m, gs) => { gs.maxNexusHP += 30; gs.nexusHP += 30; } },
-  { id: "repair", title: "Emergency Repair", desc: "Restore 45 Base HP now", icon: "Wrench", color: "#10b981", rarity: "Common", apply: (m, gs) => { gs.nexusHP = Math.min(gs.maxNexusHP, gs.nexusHP + 45); } },
+  { id: "crit", title: "Sure-Handed Aim", desc: "+12% critical chance (2x dmg)", icon: "Target", color: "#ef4444", rarity: "Uncommon", apply: (m) => (m.critChance += 0.12) },
+  { id: "slot", title: "Extra Battlements", desc: "+2 tower build slots", icon: "LayoutGrid", color: "#8b5cf6", rarity: "Rare", apply: (m) => (m.extraSlots += 2) },
+  { id: "hp", title: "Fortified Keep", desc: "+30 max Keep Health (healed)", icon: "ShieldPlus", color: "#10b981", rarity: "Uncommon", apply: (m, gs) => { gs.maxNexusHP += 30; gs.nexusHP += 30; } },
+  { id: "repair", title: "Mason's Fortification", desc: "Restore 45 Keep Health now", icon: "Wrench", color: "#10b981", rarity: "Common", apply: (m, gs) => { gs.nexusHP = Math.min(gs.maxNexusHP, gs.nexusHP + 45); } },
   { id: "gem", title: "Gem Prospector", desc: "+8% chance to drop a Gem", icon: "Gem", color: "#06b6d4", rarity: "Uncommon", apply: (m) => (m.gemChance += 0.08) },
-  { id: "slow", title: "Cryo Amplifier", desc: "Slows last 40% longer", icon: "Snowflake", color: "#38bdf8", rarity: "Common", apply: (m) => (m.slowDurMul *= 1.4) },
-  { id: "splash", title: "Wide Payload", desc: "+30% splash radius", icon: "CircleDot", color: "#f97316", rarity: "Uncommon", apply: (m) => (m.splashMul *= 1.3) },
+  { id: "slow", title: "Winter's Patience", desc: "Slows last 40% longer", icon: "Snowflake", color: "#38bdf8", rarity: "Common", apply: (m) => (m.slowDurMul *= 1.4) },
+  { id: "splash", title: "Broadside Powder", desc: "+30% splash radius", icon: "CircleDot", color: "#f97316", rarity: "Uncommon", apply: (m) => (m.splashMul *= 1.3) },
 ];
 
 export function drawPerks(count = 3, exclude = []) {

@@ -5,6 +5,7 @@ import SpawnTapAdapter from "@/game/spawntap_adapter";
 import audio from "@/game/audio";
 import { drawPerks } from "@/game/config";
 import { loadSave, writeSave, clearSave, loadMeta, writeMeta } from "@/game/storage";
+import { getDailyEngagement, normalizeDailyProgress } from "@/game/engagement";
 import { submitScore, logMonetization } from "@/lib/api";
 
 import { AdBanner } from "@/components/game/AdBanner";
@@ -15,15 +16,39 @@ import DefeatModal from "@/components/game/DefeatModal";
 import VictoryModal from "@/components/game/VictoryModal";
 import VaultModal from "@/components/game/VaultModal";
 import LeaderboardModal from "@/components/game/LeaderboardModal";
+import DailyChallengeModal from "@/components/game/DailyChallengeModal";
 import AdInterstitial from "@/components/game/AdInterstitial";
 import StartScreen from "@/components/game/StartScreen";
 
+function getImpactCountdown() {
+  const metaData = loadMeta();
+  const deadline = Number(metaData.hordeImpactAt || 0);
+  const safeDeadline = deadline > 0 ? deadline : Date.now() + 24 * 60 * 60 * 1000;
+  if (!metaData.hordeImpactAt) {
+    metaData.hordeImpactAt = safeDeadline;
+    writeMeta(metaData);
+  }
+  const totalSeconds = Math.max(0, Math.floor((safeDeadline - Date.now()) / 1000));
+  return { totalSeconds };
+}
+
 const INITIAL = {
-  nexusHP: 100, maxNexusHP: 100, gold: 300, gems: 0, soulGems: 0, prestigeLevel: 0,
+  nexusHP: 100, maxNexusHP: 100, gold: 300, gems: 0, soulGems: 0, prestigeLevel: 0, activePath: [],
   wave: 0, maxWave: 20, waveStatus: "idle", isBoss: false, nextBoss: 5, gameSpeed: 1,
   paused: false, selectedTower: null, enemiesRemaining: 0, towersPlaced: 0, maxTowers: 6,
   perks: [], heroCooldowns: { nuke: 0, freeze: 0, heal: 0 }, lastWaveLoot: { gold: 0, gems: 0 }, selectedPlaced: null,
 };
+
+function getHordeImpactCountdown() {
+  const stored = Number(loadMeta().hordeImpactAt || 0);
+  const base = stored > 0 ? stored : Date.now() + 24 * 60 * 60 * 1000;
+  if (!stored) {
+    const metaData = loadMeta();
+    metaData.hordeImpactAt = base;
+    writeMeta(metaData);
+  }
+  return Math.max(0, Math.ceil((base - Date.now()) / 1000));
+}
 
 export default function Game() {
   const canvasRef = useRef(null);
@@ -35,6 +60,8 @@ export default function Game() {
   const meta = useRef(loadMeta()).current;
 
   const [state, setState] = useState(INITIAL);
+  const [daily, setDaily] = useState(getDailyEngagement());
+  const [dailyProgress, setDailyProgress] = useState(meta.daily ? normalizeDailyProgress(meta.daily, daily) : normalizeDailyProgress(null, daily));
   const [started, setStarted] = useState(false);
   const [name, setName] = useState(meta.playerName || "");
   const [soundOn, setSoundOn] = useState(true);
@@ -44,6 +71,8 @@ export default function Game() {
   const [showVictory, setShowVictory] = useState(false);
   const [showVault, setShowVault] = useState(false);
   const [showLeaderboard, setShowLeaderboard] = useState(false);
+  const [showDaily, setShowDaily] = useState(false);
+  const [showEmergencySlot, setShowEmergencySlot] = useState(false);
   const [adModal, setAdModal] = useState(null); // rewardType string
 
   const [reviveUsed, setReviveUsed] = useState(false);
@@ -52,6 +81,7 @@ export default function Game() {
 
   const [spawntapStatus, setSpawntapStatus] = useState("connecting");
   const [playtimeSeconds, setPlaytimeSeconds] = useState(0);
+  const [impactCountdown, setImpactCountdown] = useState(getImpactCountdown());
 
   const hasSaveRef = useRef(!!loadSave());
 
@@ -60,8 +90,87 @@ export default function Game() {
     setDraft({ cards: drawPerks(3), rerolls: 0 });
   }, []);
 
+  const updateDailyProgress = useCallback((stat, delta = 1) => {
+    setDailyProgress((prev) => {
+      const base = normalizeDailyProgress(prev || meta.daily || null, daily);
+      const next = {
+        ...base,
+        key: daily.key,
+        challengeId: daily.challenge.id,
+        quests: { ...base.quests },
+      };
+      for (const quest of daily.quests) {
+        const entry = next.quests[quest.id];
+        if (!entry) continue;
+        if (quest.stat === stat) {
+          entry.progress = Math.min(quest.target, (entry.progress || 0) + delta);
+        }
+      }
+      // challenge progress is a simple daily objective of clearing enough waves in a run
+      const waveProgress = Math.min(3, Math.max(0, state.wave || 0));
+      next.challengeProgress = waveProgress;
+      meta.daily = next;
+      writeMeta(meta);
+      return next;
+    });
+  }, [daily, meta, state.wave]);
+
+  const claimDailyQuestReward = useCallback((questId) => {
+    setDailyProgress((prev) => {
+      const base = normalizeDailyProgress(prev || meta.daily || null, daily);
+      const q = daily.quests.find((entry) => entry.id === questId);
+      const slot = base.quests[questId];
+      if (!q || !slot || slot.claimed || (slot.progress || 0) < q.target) return base;
+
+      const reward = q.reward || { gems: 25 };
+      const eng = engineRef.current;
+      if (eng) {
+        eng.gs.gold += reward.gold || 0;
+        eng.gs.gems += reward.gems || 0;
+        eng._emitState(true);
+      }
+
+      const next = {
+        ...base,
+        quests: { ...base.quests, [questId]: { ...slot, claimed: true } },
+      };
+      meta.daily = next;
+      writeMeta(meta);
+      toast(`Daily quest complete: +${reward.gems || 0} gems${reward.gold ? `, +${reward.gold} gold` : ""}.`);
+      return next;
+    });
+  }, [daily, meta]);
+
+  const claimDailyChallengeReward = useCallback(() => {
+    setDailyProgress((prev) => {
+      const base = normalizeDailyProgress(prev || meta.daily || null, daily);
+      if (base.challengeClaimed) return base;
+      const challengeProgress = Math.min(3, Math.max(0, state.wave || 0));
+      if (challengeProgress < 3) return base;
+
+      const reward = { gems: 60, gold: 150 };
+      const eng = engineRef.current;
+      if (eng) {
+        eng.gs.gold += reward.gold;
+        eng.gs.gems += reward.gems;
+        eng._emitState(true);
+      }
+
+      const next = { ...base, challengeClaimed: true };
+      meta.daily = next;
+      writeMeta(meta);
+      toast(`Daily challenge complete: +${reward.gems} gems, +${reward.gold} gold.`);
+      return next;
+    });
+  }, [daily, meta, state.wave]);
+
   const onDefeat = useCallback(() => {
     setShowDefeat(true);
+  }, []);
+
+  const onSlotBlocked = useCallback(() => {
+    setShowEmergencySlot(true);
+    toast("Emergency slot available: watch a rewarded ad to bypass the max-slot limit.");
   }, []);
 
   const onVictory = useCallback(() => {
@@ -75,6 +184,8 @@ export default function Game() {
       onWaveCleared,
       onDefeat,
       onVictory,
+      onSlotBlocked,
+      onDailyProgress: updateDailyProgress,
       onToast: (m) => toast(m),
     });
     engineRef.current = engine;
@@ -171,6 +282,7 @@ export default function Game() {
   const startWave = () => engineRef.current?.startWave();
   const upgradeTower = () => engineRef.current?.upgradeSelected();
   const sellTower = () => engineRef.current?.sellSelected();
+  const specializeTower = (specId) => engineRef.current?.applyTowerSpecialization(specId);
   const deselectTower = () => engineRef.current?.cancelSelect();
 
   // ----- draft -----
@@ -182,9 +294,21 @@ export default function Game() {
     const res = await playRewardedAd("REROLL_CARDS");
     if (res.success) {
       setDraft((d) => ({ cards: drawPerks(3), rerolls: (d?.rerolls || 0) + 1 }));
-      toast("New tactical protocols drafted!");
+      toast("New blessings drafted!");
     }
   };
+
+  useEffect(() => {
+    if (!daily) return;
+    meta.daily = normalizeDailyProgress(meta.daily, daily);
+    setDailyProgress(meta.daily);
+    writeMeta(meta);
+  }, [daily, meta]);
+
+  useEffect(() => {
+    const iv = setInterval(() => setImpactCountdown(getImpactCountdown()), 1000);
+    return () => clearInterval(iv);
+  }, []);
 
   // ----- score submit -----
   const submitRunScore = useCallback(async (victory) => {
@@ -255,6 +379,14 @@ export default function Game() {
   };
 
   // ----- vault -----
+  useEffect(() => {
+    const timer = setInterval(() => {
+      const next = getImpactCountdown();
+      setImpactCountdown(next);
+    }, 1000);
+    return () => clearInterval(timer);
+  }, []);
+
   const claimOffer = async (offer) => {
     logMonetization({ user_id: spawntapRef.current?.userId, event_type: "offer_started", reward_type: offer.id, meta: { title: offer.title } });
     const res = await playRewardedAd("OFFER");
@@ -287,12 +419,18 @@ export default function Game() {
 
       <HUD
         state={state}
+        daily={daily}
+        dailyProgress={dailyProgress}
+        onClaimDailyQuest={claimDailyQuestReward}
+        onClaimDailyChallenge={claimDailyChallengeReward}
         onSpeed={setSpeed}
         onPause={togglePause}
         onToggleSound={toggleSound}
         soundOn={soundOn}
         onVault={() => setShowVault(true)}
         onLeaderboard={() => setShowLeaderboard(true)}
+        onDaily={() => setShowDaily(true)}
+        impactCountdown={impactCountdown}
       />
 
       <div ref={wrapRef} className="relative flex-1 w-full overflow-hidden bg-[#090d16] flex items-center justify-center">
@@ -322,6 +460,7 @@ export default function Game() {
         onUpgrade={upgradeTower}
         onSell={sellTower}
         onDeselect={deselectTower}
+        onSpecialize={specializeTower}
       />
 
       <AdBanner position="bottom" onImpression={(p) => logMonetization({ user_id: spawntapRef.current?.userId, event_type: "banner_impression", reward_type: p, meta: {} })} />
@@ -331,6 +470,30 @@ export default function Game() {
         <DefeatModal state={state} onRevive={reviveBase} onForfeit={forfeitRun} canRevive={!reviveUsed} soulGemsEarned={soulGemsEarned} />
       )}
       {showVictory && <VictoryModal state={state} onClaim={claimVictory} onClaimDouble={claimVictoryDouble} claimedDouble={claimedDouble} />}
+      {showEmergencySlot && (
+        <div className="absolute bottom-24 left-1/2 -translate-x-1/2 z-40 w-[min(520px,calc(100%-1rem))] rounded-2xl border border-cyan-500/40 bg-slate-950/90 p-4 backdrop-blur-xl shadow-[0_0_24px_rgba(34,211,238,0.25)]">
+          <div className="flex items-center justify-between gap-3">
+            <div>
+              <p className="text-[10px] font-mono uppercase tracking-[0.3em] text-cyan-300">Emergency Slot</p>
+              <p className="text-sm text-slate-200">Need one more defender slot for this wave?</p>
+            </div>
+            <button
+              className="px-3 py-2 rounded-lg bg-cyan-400 text-slate-950 font-bold text-xs"
+              onClick={async () => {
+                const res = await playRewardedAd("EMERGENCY_SLOT");
+                if (res.success) {
+                  setShowEmergencySlot(false);
+                  engineRef.current.baseMaxTowers += 1;
+                  engineRef.current._emitState(true);
+                  toast("Emergency slot granted for this wave.");
+                }
+              }}
+            >
+              Watch Ad
+            </button>
+          </div>
+        </div>
+      )}
       {showVault && (
         <VaultModal
           status={spawntapStatus}
@@ -342,6 +505,15 @@ export default function Game() {
         />
       )}
       {showLeaderboard && <LeaderboardModal onClose={() => setShowLeaderboard(false)} />}
+      {showDaily && (
+        <DailyChallengeModal
+          daily={daily}
+          dailyProgress={dailyProgress}
+          onClose={() => setShowDaily(false)}
+          onClaimQuest={claimDailyQuestReward}
+          onClaimChallenge={claimDailyChallengeReward}
+        />
+      )}
       {adModal && <AdInterstitial rewardType={adModal} onComplete={() => closeAd(true)} onSkip={() => closeAd(false)} />}
     </div>
   );

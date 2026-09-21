@@ -47,6 +47,12 @@ export default function VaultModal({ status, playtimeSeconds, onClose, onClaimOf
     { id: "prestige", label: "Prestige Forge", icon: Sparkles },
   ];
 
+  const premiumBundle = [
+    { label: 'Frost Nova Grand Mage branch', reward: '1,000 Gems', color: '#38bdf8' },
+    { label: 'Siege Catapult artillery', reward: '2,500 Gems', color: '#f59e0b' },
+    { label: 'Royal Keep skin', reward: '5,000 Gems', color: '#a855f7' },
+  ];
+
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-slate-950/85 backdrop-blur-md" data-testid="offerwall-vault-modal">
       <div className="w-full max-w-3xl max-h-[90vh] rounded-2xl border border-amber-500/30 bg-[#0f172a] flex flex-col rise-in overflow-hidden" style={{ boxShadow: "0 0 60px rgba(0,0,0,0.6)" }}>
@@ -87,6 +93,23 @@ export default function VaultModal({ status, playtimeSeconds, onClose, onClaimOf
           {tab === "offers" && (
             <div>
               <p className="text-sm text-zinc-400 mb-4">Complete a sponsored offer to instantly claim free Gems and unlock legendary towers.</p>
+              <div className="mb-5 rounded-xl border border-cyan-500/30 bg-slate-900/70 p-3">
+                <div className="flex items-center justify-between gap-2 mb-3">
+                  <div>
+                    <p className="text-[10px] font-mono uppercase tracking-[0.2em] text-cyan-300">Premium asset alignment</p>
+                    <p className="text-sm text-zinc-200">Stripe checkout-ready bundle mapping</p>
+                  </div>
+                  <button className="px-3 py-1.5 rounded-lg bg-cyan-400 text-slate-950 text-xs font-black uppercase tracking-wide">Stripe Checkout</button>
+                </div>
+                <div className="space-y-2">
+                  {premiumBundle.map((item) => (
+                    <div key={item.label} className="flex items-center justify-between rounded-lg border border-white/10 bg-slate-950/60 px-3 py-2">
+                      <span className="text-sm text-zinc-200">{item.label}</span>
+                      <span className="text-xs font-mono font-bold" style={{ color: item.color }}>{item.reward}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3" data-testid="offerwall-grid">
                 {AFFILIATE_OFFERS.map((o) => (
                   <div

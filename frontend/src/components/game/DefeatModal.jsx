@@ -7,9 +7,9 @@ export default function DefeatModal({ state, onRevive, onForfeit, canRevive, sou
         <div className="w-16 h-16 mx-auto rounded-2xl bg-red-500/15 border border-red-500/40 flex items-center justify-center mb-4 pulse-danger">
           <Skull className="w-8 h-8 text-red-400" />
         </div>
-        <h2 className="font-display font-black text-3xl uppercase tracking-tight text-red-400">Nexus Compromised</h2>
+        <h2 className="font-display font-black text-3xl uppercase tracking-tight text-red-400">Keep Breached</h2>
         <p className="text-sm text-zinc-400 mt-2">
-          Your base fell on <span className="text-white font-bold">Wave {state.wave}</span>. Deploy a Second Chance to keep the run alive.
+          Your keep fell on <span className="text-white font-bold">Wave {state.wave}</span>. Call upon a Second Chance to keep the run alive.
         </p>
 
         {canRevive && (
@@ -26,7 +26,7 @@ export default function DefeatModal({ state, onRevive, onForfeit, canRevive, sou
             </span>
           </button>
         )}
-        <p className="text-[11px] text-zinc-500 mt-2">Restores 50% Base HP + Nukes the screen{!canRevive && " (already used this run)"}</p>
+        <p className="text-[11px] text-zinc-500 mt-2">Restores 50% Keep Health + clears the field{!canRevive && " (already used this run)"}</p>
 
         <button
           onClick={onForfeit}

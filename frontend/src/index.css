@@ -130,3 +130,66 @@ canvas {
   border-radius: 6px !important;
   box-shadow: inset 0 0 15px rgba(61, 43, 31, 0.25), 4px 5px 0px 0px var(--ink-border) !important;
 }
+
+/* --- SYNTHWAVE ARCADE THEME --- */
+:root {
+  --synth-void: #0a0017;
+  --synth-violet: #1f003b;
+  --synth-grid: #2a085c;
+  --synth-cyan: #00f0ff;
+  --synth-pink: #ff007f;
+  --synth-hot-pink: #ff0055;
+  --synth-yellow: #ffe600;
+}
+
+body, #root {
+  background: var(--synth-void) !important;
+  color: var(--synth-cyan) !important;
+  font-family: "Chivo", "Trebuchet MS", sans-serif !important;
+  background-image: linear-gradient(rgba(42, 8, 92, 0.2) 1px, transparent 1px), linear-gradient(90deg, rgba(42, 8, 92, 0.2) 1px, transparent 1px) !important;
+  background-size: 32px 32px !important;
+}
+
+h1, h2, h3, header, .font-bold {
+  color: var(--synth-cyan) !important;
+  text-shadow: 0 0 8px rgba(0, 240, 255, 0.65) !important;
+}
+
+div[class*="bg-zinc"], div[class*="bg-slate"], div[class*="bg-neutral"] {
+  background-color: rgba(31, 0, 59, 0.94) !important;
+  color: #eaffff !important;
+  border: 1px solid rgba(0, 240, 255, 0.45) !important;
+  border-radius: 8px !important;
+  box-shadow: 0 0 18px rgba(255, 0, 127, 0.18), inset 0 0 18px rgba(42, 8, 92, 0.45) !important;
+}
+
+button {
+  background-color: var(--synth-violet) !important;
+  color: var(--synth-cyan) !important;
+  border: 1px solid rgba(0, 240, 255, 0.55) !important;
+  border-radius: 6px !important;
+  box-shadow: 0 0 10px rgba(0, 240, 255, 0.18) !important;
+}
+
+button:hover, button:active {
+  background-color: #3b006b !important;
+  color: #ffffff !important;
+  border-color: var(--synth-pink) !important;
+  box-shadow: 0 0 16px rgba(255, 0, 127, 0.55) !important;
+}
+
+canvas {
+  background-color: var(--synth-void) !important;
+  border: 2px solid var(--synth-pink) !important;
+  border-radius: 2px !important;
+  box-shadow: inset 0 0 28px rgba(255, 0, 127, 0.2), 0 0 18px rgba(255, 0, 127, 0.35) !important;
+}
+
+.text-cyan-400, .text-cyan-300, .text-cyan-500 { color: var(--synth-cyan) !important; }
+.text-amber-400, .text-amber-300 { color: var(--synth-yellow) !important; }
+.text-purple-400, .text-purple-300 { color: #d15cff !important; }
+.text-red-400, .text-red-300 { color: var(--synth-hot-pink) !important; }
+.text-glow-cyan { text-shadow: 0 0 8px var(--synth-cyan), 0 0 18px var(--synth-cyan) !important; }
+.text-glow-amber { text-shadow: 0 0 8px var(--synth-yellow), 0 0 18px var(--synth-yellow) !important; }
+.neon-cyan { box-shadow: 0 0 12px rgba(0, 240, 255, 0.65) !important; }
+.neon-amber { box-shadow: 0 0 12px rgba(255, 230, 0, 0.6) !important; }

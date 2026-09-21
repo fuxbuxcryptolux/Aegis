@@ -2,8 +2,8 @@ import { useEffect, useState } from "react";
 import { X, Play, Gift } from "lucide-react";
 
 const LABELS = {
-  REVIVE_BASE: "Reviving your Nexus...",
-  REROLL_CARDS: "Rerolling tactical protocols...",
+  REVIVE_BASE: "Restoring your Keep...",
+  REROLL_CARDS: "Rerolling blessings...",
   DOUBLE_LOOT: "Doubling your loot...",
   VICTORY_2X: "Doubling your loot...",
   OFFER: "Loading sponsored offer...",
