@@ -24,7 +24,9 @@ ROOT_DIR = Path(__file__).parent
 load_dotenv(ROOT_DIR / '.env')
 
 STRIPE_WEBHOOK_SECRET = os.environ.get('STRIPE_WEBHOOK_SECRET', 'whsec_test')
+STRIPE_SECRET_KEY = os.environ.get('STRIPE_SECRET_KEY', '')
 OFFERWALL_SECRET = os.environ.get('OFFERWALL_SECRET', 'offer-secret')
+REWARD_CLAIM_SECRET = os.environ.get('REWARD_CLAIM_SECRET', 'reward-secret')
 
 # MongoDB connection
 mongo_url = os.environ.get('MONGO_URL')
@@ -81,6 +83,21 @@ class TxnEntry(BaseModel):
     reward_type: Optional[str] = None
     meta: Dict[str, Any] = Field(default_factory=dict)
     created_at: str = Field(default_factory=now_iso)
+
+
+class RewardClaim(BaseModel):
+    user_id: str = "anon"
+    reward_type: str
+    tx_id: str
+    amount: int = Field(..., ge=1, le=100000)
+    verifier: str
+
+
+class CheckoutCreate(BaseModel):
+    player_id: str = "anon"
+    price_id: str
+    success_url: str
+    cancel_url: str
 
 
 def compute_score(wave: int, gold: int, gems: int, soul_gems: int, victory: bool) -> int:
@@ -144,6 +161,45 @@ async def txn_summary():
 
 def _offerwall_signature(payload: str) -> str:
     return hmac.new(OFFERWALL_SECRET.encode(), payload.encode(), hashlib.sha256).hexdigest()
+
+
+def _reward_claim_signature(payload: str) -> str:
+    return hmac.new(REWARD_CLAIM_SECRET.encode(), payload.encode(), hashlib.sha256).hexdigest()
+
+
+@api_router.post("/monetization/reward-claim")
+async def claim_reward(payload: RewardClaim):
+    if not payload.user_id.strip() or not payload.tx_id.strip():
+        raise HTTPException(status_code=400, detail="missing reward claim fields")
+    signed = f"{payload.user_id}:{payload.reward_type}:{payload.tx_id}:{payload.amount}"
+    if not hmac.compare_digest(payload.verifier, _reward_claim_signature(signed)):
+        raise HTTPException(status_code=401, detail="invalid reward signature")
+
+    tx_key = f"reward:{payload.reward_type}:{payload.tx_id}"
+    if db is not None:
+        existing = await db.processed_transactions.update_one(
+            {"_id": tx_key},
+            {"$setOnInsert": {"provider": "reward", "tx_id": payload.tx_id, "user_id": payload.user_id, "reward_type": payload.reward_type, "amount": payload.amount, "created_at": now_iso()}},
+            upsert=True,
+        )
+        if getattr(existing, "matched_count", 0) == 0:
+            await db.users.find_one_and_update({"_id": payload.user_id}, {"$inc": {payload.reward_type: payload.amount}}, upsert=True)
+    return {"status": "ok", "duplicate": bool(db is not None and getattr(existing, "matched_count", 0) > 0) if db is not None else False, "tx_id": payload.tx_id}
+
+
+@api_router.post("/monetization/stripe-checkout")
+async def create_stripe_checkout(payload: CheckoutCreate):
+    if stripe is None or not STRIPE_SECRET_KEY:
+        raise HTTPException(status_code=503, detail="stripe checkout is not configured")
+    stripe.api_key = STRIPE_SECRET_KEY
+    session = stripe.checkout.Session.create(
+        mode="payment",
+        line_items=[{"price": payload.price_id, "quantity": 1}],
+        success_url=payload.success_url,
+        cancel_url=payload.cancel_url,
+        metadata={"player_id": payload.player_id},
+    )
+    return {"id": session.id, "url": session.url}
 
 
 @api_router.post("/monetization/offerwall-postback")

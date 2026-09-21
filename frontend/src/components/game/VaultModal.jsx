@@ -27,7 +27,7 @@ function StatusPill({ status }) {
   );
 }
 
-export default function VaultModal({ status, playtimeSeconds, onClose, onClaimOffer, onPrestige, prestige, state }) {
+export default function VaultModal({ status, playtimeSeconds, onClose, onClaimOffer, onPremiumPurchase, onPrestige, prestige, state }) {
   const [tab, setTab] = useState("offers");
   const iframeRef = useRef(null);
   const mins = Math.floor(playtimeSeconds / 60);
@@ -99,7 +99,7 @@ export default function VaultModal({ status, playtimeSeconds, onClose, onClaimOf
                     <p className="text-[10px] font-mono uppercase tracking-[0.2em] text-cyan-300">Premium asset alignment</p>
                     <p className="text-sm text-zinc-200">Stripe checkout-ready bundle mapping</p>
                   </div>
-                  <button className="px-3 py-1.5 rounded-lg bg-cyan-400 text-slate-950 text-xs font-black uppercase tracking-wide">Stripe Checkout</button>
+                  <button onClick={onPremiumPurchase} className="px-3 py-1.5 rounded-lg bg-cyan-400 text-slate-950 text-xs font-black uppercase tracking-wide">Stripe Checkout</button>
                 </div>
                 <div className="space-y-2">
                   {premiumBundle.map((item) => (

@@ -5,8 +5,8 @@ import SpawnTapAdapter from "@/game/spawntap_adapter";
 import audio from "@/game/audio";
 import { drawPerks } from "@/game/config";
 import { loadSave, writeSave, clearSave, loadMeta, writeMeta } from "@/game/storage";
-import { getDailyEngagement, normalizeDailyProgress } from "@/game/engagement";
-import { submitScore, logMonetization } from "@/lib/api";
+import { ACHIEVEMENTS, getDailyEngagement, normalizeAchievementProgress, normalizeDailyProgress } from "@/game/engagement";
+import { createStripeCheckout, submitScore, logMonetization } from "@/lib/api";
 
 import { AdBanner } from "@/components/game/AdBanner";
 import HUD from "@/components/game/HUD";
@@ -91,6 +91,9 @@ export default function Game() {
   }, []);
 
   const updateDailyProgress = useCallback((stat, delta = 1) => {
+    const achievementProgress = normalizeAchievementProgress(meta.achievements);
+    achievementProgress.stats[stat] = (achievementProgress.stats[stat] || 0) + delta;
+    meta.achievements = achievementProgress;
     setDailyProgress((prev) => {
       const base = normalizeDailyProgress(prev || meta.daily || null, daily);
       const next = {
@@ -106,14 +109,14 @@ export default function Game() {
           entry.progress = Math.min(quest.target, (entry.progress || 0) + delta);
         }
       }
-      // challenge progress is a simple daily objective of clearing enough waves in a run
-      const waveProgress = Math.min(3, Math.max(0, state.wave || 0));
-      next.challengeProgress = waveProgress;
+      next.challengeProgress = stat === "wavesCleared"
+        ? Math.min(3, (next.challengeProgress || 0) + delta)
+        : (next.challengeProgress || 0);
       meta.daily = next;
       writeMeta(meta);
       return next;
     });
-  }, [daily, meta, state.wave]);
+  }, [daily, meta]);
 
   const claimDailyQuestReward = useCallback((questId) => {
     setDailyProgress((prev) => {
@@ -164,6 +167,35 @@ export default function Game() {
     });
   }, [daily, meta, state.wave]);
 
+  const claimAchievementReward = useCallback((achievementId) => {
+    const achievement = ACHIEVEMENTS.find((item) => item.id === achievementId);
+    const progress = normalizeAchievementProgress(meta.achievements);
+    if (!achievement || progress.claimed[achievementId] || (progress.stats[achievement.stat] || 0) < achievement.target) return;
+
+    const reward = achievement.reward || {};
+    const eng = engineRef.current;
+    if (eng) {
+      eng.gs.gold += reward.gold || 0;
+      eng.gs.gems += reward.gems || 0;
+      eng.gs.soulGems += reward.soulGems || 0;
+      eng._emitState(true);
+    }
+    progress.claimed[achievementId] = true;
+    meta.achievements = progress;
+    writeMeta(meta);
+    toast(`Achievement unlocked: ${achievement.title}.`);
+  }, [meta]);
+
+  const recordRunVictory = useCallback(() => {
+    const progress = normalizeAchievementProgress(meta.achievements);
+    const today = new Date().toISOString().slice(0, 10);
+    const yesterday = new Date(Date.now() - 86400000).toISOString().slice(0, 10);
+    progress.streak = progress.lastRunDate === yesterday ? progress.streak + 1 : progress.lastRunDate === today ? progress.streak : 1;
+    progress.lastRunDate = today;
+    meta.achievements = progress;
+    writeMeta(meta);
+  }, [meta]);
+
   const onDefeat = useCallback(() => {
     setShowEmergencySlot(false);
     setShowDefeat(true);
@@ -175,9 +207,11 @@ export default function Game() {
   }, []);
 
   const onVictory = useCallback(() => {
+    updateDailyProgress("victories", 1);
+    recordRunVictory();
     setShowEmergencySlot(false);
     setShowVictory(true);
-  }, []);
+  }, [recordRunVictory, updateDailyProgress]);
 
   // ----- init engine once -----
   useEffect(() => {
@@ -403,6 +437,19 @@ export default function Game() {
       toast(`Offer complete! ${offer.reward} added.`);
     }
   };
+  const startPremiumCheckout = async () => {
+    const session = await createStripeCheckout({
+      player_id: spawntapRef.current?.userId || "anon",
+      price_id: process.env.REACT_APP_STRIPE_PRICE_ID || "price_configure_me",
+      success_url: `${window.location.origin}/?purchase=success`,
+      cancel_url: `${window.location.origin}/?purchase=cancelled`,
+    });
+    if (session?.url) {
+      window.location.assign(session.url);
+    } else {
+      toast("Premium checkout is not configured yet.");
+    }
+  };
   const doPrestige = () => {
     const eng = engineRef.current;
     const info = eng.prestige();
@@ -504,6 +551,7 @@ export default function Game() {
           playtimeSeconds={playtimeSeconds}
           onClose={() => setShowVault(false)}
           onClaimOffer={claimOffer}
+          onPremiumPurchase={startPremiumCheckout}
           onPrestige={doPrestige}
           state={state}
         />
@@ -513,9 +561,12 @@ export default function Game() {
         <DailyChallengeModal
           daily={daily}
           dailyProgress={dailyProgress}
+          achievements={ACHIEVEMENTS}
+          achievementProgress={meta.achievements}
           onClose={() => setShowDaily(false)}
           onClaimQuest={claimDailyQuestReward}
           onClaimChallenge={claimDailyChallengeReward}
+          onClaimAchievement={claimAchievementReward}
         />
       )}
       {adModal && <AdInterstitial rewardType={adModal} onComplete={() => closeAd(true)} onSkip={() => closeAd(false)} />}
