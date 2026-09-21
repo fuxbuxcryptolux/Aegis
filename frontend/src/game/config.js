@@ -38,10 +38,10 @@ export const TOWERS = {
   archer: {
     id: "archer",
     name: "Balista Archer",
-    cost: 100,
-    range: 135,
-    damage: 20,
-    fireRate: 0.38, // seconds between shots
+    cost: 90,
+    range: 140,
+    damage: 24,
+    fireRate: 0.35,
     projSpeed: 11,
     color: "#06b6d4",
     icon: "Crosshair",
@@ -51,27 +51,27 @@ export const TOWERS = {
   frost: {
     id: "frost",
     name: "Frost Nova",
-    cost: 150,
-    range: 115,
-    damage: 8,
-    fireRate: 1.05,
+    cost: 140,
+    range: 120,
+    damage: 10,
+    fireRate: 0.95,
     projSpeed: 0,
     color: "#38bdf8",
     icon: "Snowflake",
     kind: "frost",
     slowMul: 0.5,
-    slowDur: 2.2,
+    slowDur: 2.4,
     desc: "AoE cold pulse. Slows enemies by 50%.",
   },
   inferno: {
     id: "inferno",
     name: "Inferno Cannon",
-    cost: 220,
-    range: 150,
-    damage: 42,
-    fireRate: 1.15,
+    cost: 210,
+    range: 155,
+    damage: 46,
+    fireRate: 1.1,
     projSpeed: 7,
-    splash: 58,
+    splash: 60,
     burnDps: 14,
     burnDur: 3,
     color: "#f97316",
@@ -82,10 +82,10 @@ export const TOWERS = {
   tesla: {
     id: "tesla",
     name: "Storm Spire",
-    cost: 300,
-    range: 125,
-    damage: 26,
-    fireRate: 0.8,
+    cost: 290,
+    range: 128,
+    damage: 28,
+    fireRate: 0.75,
     projSpeed: 0,
     chain: 4,
     color: "#a855f7",
@@ -148,9 +148,13 @@ export const HERO_ORDER = ["nuke", "freeze", "heal"];
 // Creep archetypes
 export const CREEPS = {
   scout: { key: "scout", name: "Scout Swarm", speed: 66, hp: 46, reward: 8, leak: 4, radius: 11, color: "#94a3b8" },
+  walker: { key: "walker", name: "Lurching Walker", speed: 52, hp: 70, reward: 12, leak: 5, radius: 12, color: "#84cc16" },
   brute: { key: "brute", name: "Armored Brute", speed: 34, hp: 190, reward: 22, leak: 10, radius: 15, color: "#eab308" },
+  spewer: { key: "spewer", name: "Spewer Bile", speed: 48, hp: 116, reward: 20, leak: 7, radius: 13, color: "#22c55e" },
   phantom: { key: "phantom", name: "Void Phantom", speed: 54, hp: 95, reward: 15, leak: 6, radius: 12, color: "#c084fc" },
+  mutant: { key: "mutant", name: "Mutant Runner", speed: 72, hp: 140, reward: 28, leak: 9, radius: 14, color: "#f97316" },
   boss: { key: "boss", name: "GOLIATH TITAN", speed: 22, hp: 1500, reward: 200, leak: 40, radius: 26, color: "#f43f5e", boss: true },
+  zombie_king: { key: "zombie_king", name: "ZOMBIE KING", speed: 26, hp: 2200, reward: 360, leak: 48, radius: 30, color: "#f59e0b", boss: true },
   graverobber: { key: "graverobber", name: "Plague Graverobber", speed: 50, hp: 110, reward: 18, leak: 6, radius: 12, color: "#facc15" },
   overcharger: { key: "overcharger", name: "Galvanized Ghoul", speed: 72, hp: 130, reward: 24, leak: 8, radius: 13, color: "#a5f3fc" },
   necroparasite: { key: "necroparasite", name: "Necro-Parasite", speed: 62, hp: 170, reward: 32, leak: 9, radius: 11, color: "#d946ef" },
@@ -162,21 +166,23 @@ export const MAX_WAVE = 20;
 export function buildWave(wave) {
   const isBoss = wave % 5 === 0;
   const spawns = [];
-  const hpMul = 1 + (wave - 1) * 0.2;
+  const hpMul = 1 + (wave - 1) * 0.14;
   const rewardMul = 1 + (wave - 1) * 0.04;
   const push = (key, n) => {
     for (let i = 0; i < n; i++) spawns.push(key);
   };
-  push("scout", 6 + wave * 2);
-  if (wave >= 3) push("phantom", Math.floor(wave * 1.2));
-  if (wave >= 4) push("brute", Math.floor(wave * 0.8));
-  // shuffle a bit
+  push("scout", 4 + Math.max(0, wave - 1));
+  if (wave >= 2) push("walker", Math.floor(wave * 0.9));
+  if (wave >= 3) push("phantom", Math.floor(wave * 0.9));
+  if (wave >= 4) push("brute", Math.floor(wave * 0.55));
+  if (wave >= 6) push("spewer", Math.floor(wave * 0.52));
+  if (wave >= 8) push("mutant", Math.floor(wave * 0.48));
   for (let i = spawns.length - 1; i > 0; i--) {
     const j = Math.floor(Math.random() * (i + 1));
     [spawns[i], spawns[j]] = [spawns[j], spawns[i]];
   }
-  if (isBoss) spawns.push("boss");
-  return { spawns, isBoss, hpMul, rewardMul, interval: Math.max(0.35, 0.9 - wave * 0.02) };
+  if (isBoss) spawns.push(wave >= 10 ? "zombie_king" : "boss");
+  return { spawns, isBoss, hpMul, rewardMul, interval: Math.max(0.36, 0.92 - wave * 0.02) };
 }
 
 // Roguelike perk pool

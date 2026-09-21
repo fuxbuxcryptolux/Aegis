@@ -44,9 +44,9 @@ export default function HUD({
 
   return (
     <header className="h-auto min-h-16 px-2 sm:px-4 py-2 bg-[#0f172a]/90 backdrop-blur-xl border-b border-cyan-500/20 flex items-center justify-between gap-2 z-30 shadow-[0_4px_24px_rgba(0,0,0,0.6)] shrink-0 flex-wrap">
-      <div className="w-full flex items-center justify-center py-1 px-2 mb-1 border border-[#ff0055]/40 bg-[#14040c] rounded-md shadow-[0_0_18px_rgba(255,0,85,0.2)]">
-        <span className="text-[10px] font-mono font-black uppercase tracking-[0.35em] text-[#ff0055]">[!!] HORDE IMPACT IN:</span>
-        <span className="ml-3 font-mono text-sm font-bold text-cyan-300">{hours}h : {minutes}m : {seconds}s</span>
+      <div className="w-full flex items-center justify-center gap-2 py-1.5 px-3 mb-1 border border-cyan-500/30 bg-slate-950/80 rounded-lg shadow-[0_0_18px_rgba(34,211,238,0.18)]">
+        <span className="text-[9px] sm:text-[10px] font-mono font-black uppercase tracking-[0.25em] text-cyan-300">Horde Impact</span>
+        <span className="font-mono text-xs sm:text-sm font-bold text-cyan-200">{hours}:{minutes}:{seconds}</span>
       </div>
       {/* Left: Keep health */}
       <div className="flex items-center gap-3 min-w-0">

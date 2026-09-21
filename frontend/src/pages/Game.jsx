@@ -165,6 +165,7 @@ export default function Game() {
   }, [daily, meta, state.wave]);
 
   const onDefeat = useCallback(() => {
+    setShowEmergencySlot(false);
     setShowDefeat(true);
   }, []);
 
@@ -174,6 +175,7 @@ export default function Game() {
   }, []);
 
   const onVictory = useCallback(() => {
+    setShowEmergencySlot(false);
     setShowVictory(true);
   }, []);
 
@@ -310,6 +312,12 @@ export default function Game() {
     return () => clearInterval(iv);
   }, []);
 
+  useEffect(() => {
+    if (showEmergencySlot && state.towersPlaced < state.maxTowers) {
+      setShowEmergencySlot(false);
+    }
+  }, [showEmergencySlot, state.towersPlaced, state.maxTowers]);
+
   // ----- score submit -----
   const submitRunScore = useCallback(async (victory) => {
     if (scoreSubmitted) return;
@@ -328,17 +336,21 @@ export default function Game() {
 
   // ----- defeat -----
   const reviveBase = async () => {
+    const eng = engineRef.current;
+    if (!eng) return;
     const res = await playRewardedAd("REVIVE_BASE");
     if (res.success) {
       setReviveUsed(true);
       setShowDefeat(false);
-      engineRef.current?.reviveBase();
+      eng.reviveBase();
     } else {
       toast("Ad not completed — revive cancelled.");
     }
   };
   const forfeitRun = async () => {
     const eng = engineRef.current;
+    if (!eng) return;
+    setShowEmergencySlot(false);
     await submitRunScore(false);
     const earned = Math.max(1, eng.gs.wave) + Math.floor(eng.gs.gems / 100);
     const newSoul = (meta.soulGems || 0) + earned;
@@ -356,8 +368,10 @@ export default function Game() {
 
   // ----- victory -----
   const claimVictory = async () => {
-    await submitRunScore(true);
     const eng = engineRef.current;
+    if (!eng) return;
+    await submitRunScore(true);
+    setShowEmergencySlot(false);
     clearSave();
     setShowVictory(false);
     setClaimedDouble(false);
@@ -379,14 +393,6 @@ export default function Game() {
   };
 
   // ----- vault -----
-  useEffect(() => {
-    const timer = setInterval(() => {
-      const next = getImpactCountdown();
-      setImpactCountdown(next);
-    }, 1000);
-    return () => clearInterval(timer);
-  }, []);
-
   const claimOffer = async (offer) => {
     logMonetization({ user_id: spawntapRef.current?.userId, event_type: "offer_started", reward_type: offer.id, meta: { title: offer.title } });
     const res = await playRewardedAd("OFFER");
@@ -483,9 +489,7 @@ export default function Game() {
                 const res = await playRewardedAd("EMERGENCY_SLOT");
                 if (res.success) {
                   setShowEmergencySlot(false);
-                  engineRef.current.baseMaxTowers += 1;
-                  engineRef.current._emitState(true);
-                  toast("Emergency slot granted for this wave.");
+                  engineRef.current?.grantEmergencySlot();
                 }
               }}
             >

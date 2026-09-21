@@ -170,6 +170,11 @@ export default class GameEngine {
     this.freezeTimer = 0;
     this._secretSpawnTimer = 0;
     this._secretSpawned = { graverobber: false, overcharger: false, necroparasite: false };
+    this._zeroHourStarted = false;
+    this._hordePulseTimer = 0;
+    this._specialWaveBurst = 0;
+    this.bannerText = "";
+    this.bannerTTL = 0;
     this.energyUseCount = 0;
     this.hordeImpactAt = Date.now() + 24 * 60 * 60 * 1000;
     this.hordeImpactActive = false;
@@ -367,6 +372,29 @@ export default class GameEngine {
     this._emitState(true);
   }
 
+  _cleanupDeadDefenders() {
+    const now = performance.now();
+    const survivors = [];
+    for (const t of this.towers) {
+      const d = t.defender;
+      if (!d || !d.dead) {
+        survivors.push(t);
+        continue;
+      }
+      if (now >= (d.cleaningUntil || 0)) {
+        this._spawnParticles(t.x, t.y, "#00f0ff", 16);
+        this.hooks.onToast?.(`${TOWERS[t.id].name} collapsed into wisps and the slot reopened.`);
+        continue;
+      }
+      survivors.push(t);
+    }
+    this.towers = survivors;
+    this.defenders = this.defenders.filter((d) => !d.dead);
+    if (this.selectedPlaced && !this.towers.includes(this.selectedPlaced)) {
+      this.selectedPlaced = null;
+    }
+  }
+
   _upgradeCost(t) {
     return Math.floor(TOWERS[t.id].cost * 0.7 * t.level);
   }
@@ -395,7 +423,11 @@ export default class GameEngine {
   // ---------- waves ----------
   startWave() {
     if (this.gs.waveStatus === "active" || this.gs.waveStatus === "defeat" || this.gs.waveStatus === "victory") return;
+    this.selectedTower = null;
+    this.selectedPlaced = null;
     this.gs.wave += 1;
+    this.bannerText = "";
+    this.bannerTTL = 0;
     this._setActivePath(this.gs.wave);
     this.creeps = [];
     this.projectiles = [];
@@ -411,6 +443,8 @@ export default class GameEngine {
     this._pendingLoot = { gold: 0, gems: 0 };
     if (conf.isBoss) {
       audio.play("boss");
+      this.bannerText = conf.isBoss ? `WAVE ${this.gs.wave} // BOSS` : `WAVE ${this.gs.wave}`;
+      this.bannerTTL = 1.5;
       this.hooks.onToast?.(`WAVE ${this.gs.wave} - MEGA BOSS INCOMING!`);
     }
     this._emitState(true);
@@ -438,7 +472,8 @@ export default class GameEngine {
       burnT: 0,
       burnDps: 0,
       name: c.name,
-      kind: "normal",
+      kind: c.key,
+      special: c.key,
     });
   }
 
@@ -479,6 +514,25 @@ export default class GameEngine {
     this._spawnParticles(base.x, base.y, base.color, 18);
   }
 
+  _maybeTriggerSecretSpawns() {
+    if (this.gs.waveStatus !== 'active') return;
+    if (this.creeps.length >= 22 && this._specialWaveBurst === 0) {
+      this._specialWaveBurst = 1;
+      this._spawnHiddenCreep('graverobber');
+      this.hooks.onToast?.('A grave thief has found the line.');
+    }
+    if (this.gs.wave >= 8 && this.hiddenLocks.energyUses >= 4 && !this.hiddenLocks.overcharger) {
+      this.hiddenLocks.overcharger = true;
+      this._spawnHiddenCreep('overcharger');
+      this.hooks.onToast?.('The Galvanized Ghoul is charging the lanes.');
+    }
+    if (this.gs.wave >= 12 && !this.hiddenLocks.necroparasite) {
+      this.hiddenLocks.necroparasite = true;
+      this._spawnHiddenCreep('necroparasite');
+      this.hooks.onToast?.('The Necro-Parasite splits the path in two.');
+    }
+  }
+
   _evaluateHiddenUnlocks() {
     if (!this.hiddenLocks.graverobber && this.gs.gold > 2500) {
       this.hiddenLocks.graverobber = true;
@@ -495,6 +549,7 @@ export default class GameEngine {
       this._spawnHiddenCreep('necroparasite');
       this.hooks.onToast?.('The Necro-Parasite splits the path in two.');
     }
+    this._maybeTriggerSecretSpawns();
   }
 
   // ---------- abilities ----------
@@ -600,6 +655,13 @@ export default class GameEngine {
   setPaused(p) {
     this.gs.paused = p;
     this._emitState(true);
+  }
+
+  grantEmergencySlot() {
+    this.baseMaxTowers += 1;
+    this.hooks.onToast?.("Emergency slot granted for this wave.");
+    this._emitState(true);
+    return this.maxTowers;
   }
 
   // ---------- combat helpers ----------
@@ -720,6 +782,25 @@ export default class GameEngine {
 
     this._evaluateHiddenUnlocks();
 
+    const hordeActive = Date.now() >= this.hordeImpactAt;
+    this.hordeImpactActive = hordeActive;
+    if (hordeActive) {
+      if (!this._zeroHourStarted) {
+        this._zeroHourStarted = true;
+        this._spawnParticles(this.base.x, this.base.y, '#ff0055', 28);
+        this.bannerText = 'ZERO HOUR';
+        this.bannerTTL = 2.25;
+        this.hooks.onToast?.('ZERO HOUR // the horde has broken through.');
+      }
+      this._hordePulseTimer += dt;
+      if (this._hordePulseTimer >= 6 && this.gs.waveStatus === 'active') {
+        this._hordePulseTimer = 0;
+        const burst = ['graverobber', 'overcharger', 'necroparasite', 'mutant', 'spewer'];
+        const kind = burst[Math.floor(Math.random() * burst.length)];
+        this._spawnHiddenCreep(kind);
+      }
+    }
+
     // creeps
     for (const c of this.creeps) {
       if (c.slowT > 0) {
@@ -744,8 +825,7 @@ export default class GameEngine {
       }
     }
 
-    this.towers = this.towers.filter((t) => !t.defender || !t.defender.dead);
-    this.defenders = this.defenders.filter((d) => !d.dead);
+    this._cleanupDeadDefenders();
     for (const t of this.towers) {
       t.cd -= dt;
       const st = this.towerStats(t);
@@ -789,6 +869,10 @@ export default class GameEngine {
     this.creeps = alive;
 
     this._updateParticles(dt);
+    if (this.bannerTTL > 0) {
+      this.bannerTTL = Math.max(0, this.bannerTTL - dt);
+      if (this.bannerTTL === 0) this.bannerText = "";
+    }
 
     // wave end / defeat / victory checks
     if (this.gs.nexusHP <= 0 && this.gs.waveStatus === "active") {
@@ -946,6 +1030,7 @@ export default class GameEngine {
     ctx.scale(this.scale, this.scale);
 
     this._drawGrid(ctx);
+    this._drawPhaseBanner(ctx);
     this._drawSpots(ctx);
     this._drawPath(ctx);
     this._drawBase(ctx);
@@ -958,6 +1043,22 @@ export default class GameEngine {
     this._drawFloaters(ctx);
     this._drawPlacementPreview(ctx);
 
+    ctx.restore();
+  }
+
+  _drawPhaseBanner(ctx) {
+    if (!this.bannerText) return;
+    const alpha = Math.min(1, Math.max(0, this.bannerTTL / 1.5));
+    ctx.save();
+    ctx.globalAlpha = alpha;
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.font = '900 28px "Segoe UI", sans-serif';
+    ctx.fillStyle = this.bannerText.includes('ZERO') ? '#ff0055' : '#fbbf24';
+    ctx.strokeStyle = '#f8fafc';
+    ctx.lineWidth = 2;
+    ctx.strokeText(this.bannerText, WORLD_W / 2, 58);
+    ctx.fillText(this.bannerText, WORLD_W / 2, 58);
     ctx.restore();
   }
 
@@ -1157,15 +1258,19 @@ export default class GameEngine {
 
   _drawCreeps(ctx) {
     for (const c of this.creeps) {
-      const creepColor = c.boss ? "#ffe600" : c.key === "brute" ? "#ff0055" : c.kind === 'graverobber' ? '#facc15' : c.kind === 'overcharger' ? '#60a5fa' : c.kind === 'necroparasite' || c.key === 'necroparasite' ? '#a855f7' : '#39ff14';
+      const isBossType = c.boss || c.key === 'zombie_king';
+      const isMutant = c.kind === 'mutant' || c.key === 'mutant';
+      const isSpewer = c.kind === 'spewer' || c.key === 'spewer';
+      const isWalker = c.kind === 'walker' || c.key === 'walker';
+      const creepColor = isBossType ? '#ffe600' : c.key === 'brute' ? '#ff0055' : c.kind === 'graverobber' ? '#facc15' : c.kind === 'overcharger' ? '#60a5fa' : c.kind === 'necroparasite' || c.key === 'necroparasite' ? '#a855f7' : isMutant ? '#f97316' : isSpewer ? '#22c55e' : isWalker ? '#84cc16' : '#39ff14';
       ctx.save();
       ctx.shadowColor = creepColor;
       ctx.shadowBlur = 12;
-      ctx.fillStyle = c.boss ? '#ffe600' : c.key === 'brute' ? '#ff7f50' : c.kind === 'graverobber' ? '#facc15' : c.kind === 'overcharger' ? '#60a5fa' : c.kind === 'necroparasite' || c.key === 'necroparasite' ? '#a855f7' : '#39ff14';
+      ctx.fillStyle = isBossType ? '#ffe600' : c.key === 'brute' ? '#ff7f50' : c.kind === 'graverobber' ? '#facc15' : c.kind === 'overcharger' ? '#60a5fa' : c.kind === 'necroparasite' || c.key === 'necroparasite' ? '#a855f7' : isMutant ? '#f97316' : isSpewer ? '#22c55e' : isWalker ? '#84cc16' : '#39ff14';
       ctx.strokeStyle = creepColor;
       ctx.lineWidth = c.boss ? 3 : 2.5;
       ctx.beginPath();
-      if (c.boss) {
+      if (isBossType) {
         ctx.moveTo(c.x - 18, c.y + 16);
         ctx.lineTo(c.x - 10, c.y - 18);
         ctx.lineTo(c.x, c.y - 28);
@@ -1178,17 +1283,32 @@ export default class GameEngine {
       ctx.fill();
       ctx.stroke();
       ctx.shadowBlur = 0;
-      ctx.fillStyle = '#f8fafc';
-      ctx.fillRect(c.x - 8, c.y - 4, 5, 5);
-      ctx.fillRect(c.x + 3, c.y - 4, 5, 5);
+
+      if (isMutant) {
+        ctx.fillStyle = '#fef3c7';
+        ctx.fillRect(c.x - 10, c.y - 2, 20, 4);
+      } else if (isSpewer) {
+        ctx.fillStyle = '#bbf7d0';
+        ctx.fillRect(c.x - 8, c.y - 3, 16, 6);
+      } else {
+        ctx.fillStyle = '#f8fafc';
+        ctx.fillRect(c.x - 8, c.y - 4, 5, 5);
+        ctx.fillRect(c.x + 3, c.y - 4, 5, 5);
+      }
+
       ctx.fillStyle = '#050505';
       ctx.fillRect(c.x - 8, c.y + 5, 16, 6);
+      if (isBossType) {
+        ctx.fillStyle = '#fbbf24';
+        ctx.fillRect(c.x - 12, c.y - 18, 24, 4);
+      }
       ctx.restore();
 
-      if (c.boss || c.kind === 'overcharger' || c.kind === 'necroparasite' || c.key === 'necroparasite') {
+      if (c.boss || c.kind === 'overcharger' || c.kind === 'necroparasite' || c.key === 'necroparasite' || isMutant || isSpewer) {
         ctx.save();
-        ctx.fillStyle = c.kind === 'necroparasite' || c.key === 'necroparasite' ? '#f5d0fe' : '#00d9ff';
-        ctx.shadowColor = '#00d9ff';
+        const eyeColor = c.kind === 'necroparasite' || c.key === 'necroparasite' ? '#f5d0fe' : isMutant ? '#fef3c7' : isSpewer ? '#dcfce7' : '#00d9ff';
+        ctx.fillStyle = eyeColor;
+        ctx.shadowColor = eyeColor;
         ctx.shadowBlur = 12;
         ctx.beginPath();
         ctx.arc(c.x - 7, c.y - 8, 2, 0, Math.PI * 2);
@@ -1367,7 +1487,20 @@ export default class GameEngine {
       if (this.gs.waveStatus === "active") this.gs.waveStatus = "cleared";
       if (this.gs.waveStatus === "defeat" || this.gs.waveStatus === "victory") this.gs.waveStatus = "idle";
       Object.assign(this.mods, s.mods || {});
-      this.towers = (s.towers || []).map((t) => ({ ...t, cd: 0, angle: 0 }));
+      this.towers = (s.towers || []).map((t) => {
+        const def = TOWERS[t.id];
+        const tower = {
+          ...t,
+          cd: 0,
+          angle: 0,
+          defender: new KingdomDefender(def, { x: t.x, y: t.y, key: t.spotKey || `${t.x},${t.y}` }, this.maxTowers),
+        };
+        tower.defender.hp = tower.defender.maxHp;
+        return tower;
+      });
+      this.defenders = this.towers
+        .map((t) => t.defender)
+        .filter(Boolean);
       if (s.hero) {
         this.hero.x = s.hero.x;
         this.hero.y = s.hero.y;
