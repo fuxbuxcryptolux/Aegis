@@ -3,27 +3,27 @@ import { Toaster } from "sonner";
 import Game from "@/pages/Game";
 import { useEffect, useState } from "react";
 import AuthScreen from "@/components/auth/AuthScreen";
-import { getCurrentUser } from "@/lib/api";
+import { getCurrentUser, logout } from "@/lib/api";
 
 function App() {
   const [user, setUser] = useState(null);
   const [checkingAuth, setCheckingAuth] = useState(true);
 
   useEffect(() => {
-    const token = localStorage.getItem("aegis_auth_token");
-    if (!token) {
-      setCheckingAuth(false);
-      return;
-    }
-    getCurrentUser(token)
+    getCurrentUser()
       .then(setUser)
-      .catch(() => localStorage.removeItem("aegis_auth_token"))
+      .catch(() => {})
       .finally(() => setCheckingAuth(false));
   }, []);
 
+  const handleLogout = async () => {
+    await logout();
+    setUser(null);
+  };
+
   return (
     <div className="App">
-      {checkingAuth ? <div className="min-h-screen bg-[#090d16]" /> : user ? <Game user={user} /> : <AuthScreen onAuthenticated={setUser} />}
+      {checkingAuth ? <div className="min-h-screen bg-[#090d16]" /> : user ? <Game user={user} onLogout={handleLogout} /> : <AuthScreen onAuthenticated={setUser} />}
       <Toaster
         position="top-center"
         theme="dark"

@@ -1,4 +1,4 @@
-import { Heart, Coins, Gem, Sparkles, Gauge, Pause, Play, Volume2, VolumeX, Store, Trophy, Zap, Target } from "lucide-react";
+import { Heart, Coins, Gem, Sparkles, Gauge, Pause, Play, Volume2, VolumeX, Store, Trophy, Zap, Target, LogOut } from "lucide-react";
 
 function Stat({ icon: Icon, value, color, testId, glow }) {
   return (
@@ -28,6 +28,8 @@ export default function HUD({
   onLeaderboard,
   onDaily,
   impactCountdown,
+  user,
+  onLogout,
 }) {
   const hpPct = Math.max(0, (state.nexusHP / state.maxNexusHP) * 100);
   const hpColor = hpPct > 50 ? "#10b981" : hpPct > 25 ? "#f59e0b" : "#ef4444";
@@ -126,6 +128,7 @@ export default function HUD({
 
       {/* Right: controls */}
       <div className="flex items-center gap-1.5 order-2 sm:order-3">
+        <span className="hidden lg:block max-w-24 truncate text-[10px] font-mono text-zinc-500" title={user?.email}>{user?.name}</span>
         <div className="flex items-center rounded-lg overflow-hidden border border-white/10" data-testid="hud-speed-toggle">
           {[1, 2, 3].map((s) => (
             <button
@@ -174,6 +177,9 @@ export default function HUD({
           className="flex items-center gap-1.5 px-2.5 py-2 rounded-lg bg-gradient-to-r from-amber-500 to-amber-600 text-slate-950 font-bold text-xs hover:from-amber-400 hover:to-amber-500 transition-colors neon-amber"
         >
           <Store className="w-4 h-4" /> <span className="hidden sm:inline">VAULT</span>
+        </button>
+        <button onClick={onLogout} data-testid="logout-button" title="Log out" className="p-2 rounded-lg bg-slate-900/60 border border-white/10 text-zinc-300 hover:text-red-300 transition-colors">
+          <LogOut className="w-4 h-4" />
         </button>
       </div>
     </header>

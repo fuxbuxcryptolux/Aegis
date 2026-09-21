@@ -3,25 +3,33 @@ import axios from "axios";
 const BACKEND_URL = process.env.REACT_APP_BACKEND_URL;
 export const API = `${BACKEND_URL}/api`;
 
-const http = axios.create({ baseURL: API, timeout: 8000 });
+const http = axios.create({ baseURL: API, timeout: 8000, withCredentials: true });
 
-export async function getCurrentUser(token) {
-  const { data } = await http.get("/auth/me", { headers: { Authorization: `Bearer ${token}` } });
+export async function getCurrentUser() {
+  const { data } = await http.get("/auth/me");
   return data;
 }
 
-export async function getCloudSave(token) {
+export async function logout() {
   try {
-    const { data } = await http.get("/account/save", { headers: { Authorization: `Bearer ${token}` } });
+    await http.post("/auth/logout");
+  } catch (e) {
+    // Clear the local session view even if the server is unavailable.
+  }
+}
+
+export async function getCloudSave() {
+  try {
+    const { data } = await http.get("/account/save");
     return data;
   } catch (e) {
     return null;
   }
 }
 
-export async function saveCloudState(token, state) {
+export async function saveCloudState(state) {
   try {
-    const { data } = await http.put("/account/save", { state }, { headers: { Authorization: `Bearer ${token}` } });
+    const { data } = await http.put("/account/save", { state });
     return data;
   } catch (e) {
     return null;

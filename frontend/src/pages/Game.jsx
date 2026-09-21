@@ -51,7 +51,7 @@ function getHordeImpactCountdown() {
   return Math.max(0, Math.ceil((base - Date.now()) / 1000));
 }
 
-export default function Game({ user }) {
+export default function Game({ user, onLogout }) {
   const canvasRef = useRef(null);
   const wrapRef = useRef(null);
   const engineRef = useRef(null);
@@ -234,9 +234,8 @@ export default function Game({ user }) {
     if (saved) engine.loadSaveState(saved);
     engine.start();
 
-    const authToken = localStorage.getItem("aegis_auth_token");
-    if (authToken) {
-      getCloudSave(authToken).then((remote) => {
+    if (user) {
+      getCloudSave().then((remote) => {
         if (remote?.state?.gs && !saved) engine.loadSaveState(remote.state);
       });
     }
@@ -264,8 +263,7 @@ export default function Game({ user }) {
     }, 3000);
     const cloudSaveInt = setInterval(() => {
       const e = engineRef.current;
-      const token = localStorage.getItem("aegis_auth_token");
-      if (e && token) saveCloudState(token, e.getSaveState());
+      if (e && user) saveCloudState(e.getSaveState());
     }, 10000);
 
     return () => {
@@ -501,6 +499,8 @@ export default function Game({ user }) {
 
       <HUD
         state={state}
+        user={user}
+        onLogout={onLogout}
         daily={daily}
         dailyProgress={dailyProgress}
         onClaimDailyQuest={claimDailyQuestReward}

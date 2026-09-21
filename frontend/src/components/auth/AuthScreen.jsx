@@ -24,12 +24,12 @@ export default function AuthScreen({ onAuthenticated }) {
     try {
       const response = await fetch(`${process.env.REACT_APP_BACKEND_URL || ""}/api/auth/${isRegister ? "register" : "login"}`, {
         method: "POST",
+        credentials: "include",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(isRegister ? { name, email, password, marketing_opt_in: marketingOptIn } : { email, password }),
       });
       const body = await response.json();
       if (!response.ok) throw new Error(body.detail || "Unable to authenticate.");
-      localStorage.setItem("aegis_auth_token", body.token);
       onAuthenticated(body.user);
     } catch (requestError) {
       setError(requestError.message);

@@ -3,6 +3,7 @@ import hmac
 import json
 import logging
 import os
+import secrets
 import uuid
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
@@ -10,9 +11,8 @@ from typing import Any, Dict, List, Optional
 
 from dotenv import load_dotenv
 import bcrypt
-import jwt
-from fastapi import APIRouter, Depends, FastAPI, HTTPException, Query, Request, status
-from fastapi.security import OAuth2PasswordBearer
+from fastapi import APIRouter, Cookie, Depends, FastAPI, HTTPException, Query, Request, Response, status
+CORS_ORIGINS=os.environ.get('CORS_ORIGINS', 'http://localhost:3000').split(','),
 from motor.motor_asyncio import AsyncIOMotorClient
 from pydantic import BaseModel, ConfigDict, Field
 from starlette.middleware.cors import CORSMiddleware
@@ -30,9 +30,11 @@ STRIPE_WEBHOOK_SECRET = os.environ.get('STRIPE_WEBHOOK_SECRET', 'whsec_test')
 STRIPE_SECRET_KEY = os.environ.get('STRIPE_SECRET_KEY', '')
 OFFERWALL_SECRET = os.environ.get('OFFERWALL_SECRET', 'offer-secret')
 REWARD_CLAIM_SECRET = os.environ.get('REWARD_CLAIM_SECRET', 'reward-secret')
-JWT_SECRET = os.environ.get('JWT_SECRET', 'change-me-in-production')
-JWT_ALGORITHM = 'HS256'
-JWT_TTL_DAYS = int(os.environ.get('JWT_TTL_DAYS', '30'))
+SESSION_TTL_DAYS = int(os.environ.get('SESSION_TTL_DAYS', '30'))
+SESSION_COOKIE = 'aegis_session'
+APP_ENV = os.environ.get('APP_ENV', 'development').lower()
+COOKIE_SECURE = os.environ.get('COOKIE_SECURE', 'true' if APP_ENV == 'production' else 'false').lower() == 'true'
+ALLOWED_ORIGINS = [origin.strip().rstrip('/') for origin in os.environ.get('CORS_ORIGINS', 'http://localhost:3000').split(',') if origin.strip()]
 
 # MongoDB connection
 mongo_url = os.environ.get('MONGO_URL')
@@ -45,7 +47,6 @@ else:
 
 app = FastAPI(title="Aegis Rogue API")
 api_router = APIRouter(prefix="/api")
-oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/api/auth/login")
 
 
 def now_iso() -> str:
@@ -136,24 +137,35 @@ def public_user(user: Dict[str, Any]) -> Dict[str, Any]:
     }
 
 
-def issue_token(user_id: str) -> str:
+def hash_session(token: str) -> str:
+    return hashlib.sha256(token.encode()).hexdigest()
+
+
+async def create_session(user_id: str) -> str:
+    token = secrets.token_urlsafe(48)
     now = datetime.now(timezone.utc)
-    return jwt.encode(
-        {"sub": user_id, "iat": now, "exp": now + timedelta(days=JWT_TTL_DAYS)},
-        JWT_SECRET,
-        algorithm=JWT_ALGORITHM,
-    )
+    await db.sessions.insert_one({
+        "_id": hash_session(token),
+        "user_id": user_id,
+        "created_at": now_iso(),
+        "expires_at": now + timedelta(days=SESSION_TTL_DAYS),
+    })
+    return token
 
 
-async def current_user(token: str = Depends(oauth2_scheme)) -> Dict[str, Any]:
+async def current_user(request: Request, aegis_session: Optional[str] = Cookie(default=None)) -> Dict[str, Any]:
     credentials_error = HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="invalid authentication credentials")
     try:
-        payload = jwt.decode(token, JWT_SECRET, algorithms=[JWT_ALGORITHM])
-        user_id = str(payload.get("sub", "")).strip()
+        if not aegis_session or db is None:
+            raise credentials_error
+        session = await db.sessions.find_one({"_id": hash_session(aegis_session)})
+        raw_expiry = session.get("expires_at") if session else None
+        expires_at = datetime.fromisoformat(raw_expiry) if isinstance(raw_expiry, str) else raw_expiry or datetime.min.replace(tzinfo=timezone.utc)
+        user_id = str(session.get("user_id", "")).strip() if session and expires_at > datetime.now(timezone.utc) else ""
         if not user_id or db is None:
             raise credentials_error
         user = await db.users.find_one({"_id": user_id})
-    except (jwt.PyJWTError, ValueError):
+    except (ValueError, TypeError):
         raise credentials_error
     if not user:
         raise credentials_error
@@ -179,7 +191,7 @@ async def health():
 
 
 @api_router.post("/auth/register")
-async def register(payload: RegisterCreate):
+async def register(payload: RegisterCreate, response: Response):
     if db is None:
         raise HTTPException(status_code=503, detail="account storage is not configured")
     email = normalize_email(payload.email)
@@ -199,17 +211,29 @@ async def register(payload: RegisterCreate):
         "updated_at": now_iso(),
     }
     await db.users.insert_one(user)
-    return {"token": issue_token(user_id), "user": public_user(user)}
+    session_token = await create_session(user_id)
+    response.set_cookie(SESSION_COOKIE, session_token, httponly=True, secure=COOKIE_SECURE, samesite="strict", max_age=SESSION_TTL_DAYS * 86400)
+    return {"user": public_user(user)}
 
 
 @api_router.post("/auth/login")
-async def login(payload: LoginCreate):
+async def login(payload: LoginCreate, response: Response):
     if db is None:
         raise HTTPException(status_code=503, detail="account storage is not configured")
     user = await db.users.find_one({"email": normalize_email(payload.email)})
     if not user or not bcrypt.checkpw(payload.password.encode(), user.get("password_hash", "").encode()):
         raise HTTPException(status_code=401, detail="invalid email or password")
-    return {"token": issue_token(str(user["_id"])), "user": public_user(user)}
+    session_token = await create_session(str(user["_id"]))
+    response.set_cookie(SESSION_COOKIE, session_token, httponly=True, secure=COOKIE_SECURE, samesite="strict", max_age=SESSION_TTL_DAYS * 86400)
+    return {"user": public_user(user)}
+
+
+@api_router.post("/auth/logout")
+async def logout(response: Response, aegis_session: Optional[str] = Cookie(default=None)):
+    if aegis_session and db is not None:
+        await db.sessions.delete_one({"_id": hash_session(aegis_session)})
+    response.delete_cookie(SESSION_COOKIE, secure=COOKIE_SECURE, httponly=True, samesite="strict")
+    return {"status": "ok"}
 
 
 @api_router.get("/auth/me")
@@ -235,9 +259,9 @@ async def put_cloud_save(payload: CloudSave, user: Dict[str, Any] = Depends(curr
 
 
 @api_router.post("/leaderboard", response_model=ScoreEntry)
-async def submit_score(payload: ScoreCreate):
+async def submit_score(payload: ScoreCreate, user: Dict[str, Any] = Depends(current_user)):
     entry = ScoreEntry(
-        name=payload.name.strip()[:24] or "Anonymous",
+        name=str(user.get("name", "Commander"))[:24],
         wave=payload.wave,
         gold=payload.gold,
         gems=payload.gems,
@@ -245,7 +269,9 @@ async def submit_score(payload: ScoreCreate):
         victory=payload.victory,
         score=compute_score(payload.wave, payload.gold, payload.gems, payload.soul_gems, payload.victory),
     )
-    await db.leaderboard.insert_one(entry.model_dump())
+    record = entry.model_dump()
+    record["user_id"] = str(user["_id"])
+    await db.leaderboard.insert_one(record)
     return entry
 
 
@@ -256,8 +282,8 @@ async def get_leaderboard(limit: int = Query(default=20, ge=1, le=100)):
 
 
 @api_router.post("/monetization/log", response_model=TxnEntry)
-async def log_txn(payload: TxnCreate):
-    entry = TxnEntry(**payload.model_dump())
+async def log_txn(payload: TxnCreate, user: Dict[str, Any] = Depends(current_user)):
+    entry = TxnEntry(**{**payload.model_dump(), "user_id": str(user["_id"])})
     await db.transactions.insert_one(entry.model_dump())
     return entry
 
@@ -391,7 +417,7 @@ app.include_router(api_router)
 app.add_middleware(
     CORSMiddleware,
     allow_credentials=True,
-    allow_origins=os.environ.get('CORS_ORIGINS', '*').split(','),
+    allow_origins=ALLOWED_ORIGINS,
     allow_methods=["*"],
     allow_headers=["*"],
 )
@@ -402,4 +428,26 @@ logger = logging.getLogger(__name__)
 
 @app.on_event("shutdown")
 async def shutdown_db_client():
-    client.close()
+    if client is not None:
+        client.close()
+
+
+@app.on_event("startup")
+async def validate_security_configuration():
+    if APP_ENV == 'production':
+        required = {
+            'MONGO_URL': mongo_url,
+            'JWT_SECRET': os.environ.get('JWT_SECRET'),
+            'OFFERWALL_SECRET': os.environ.get('OFFERWALL_SECRET'),
+            'REWARD_CLAIM_SECRET': os.environ.get('REWARD_CLAIM_SECRET'),
+            'STRIPE_WEBHOOK_SECRET': os.environ.get('STRIPE_WEBHOOK_SECRET'),
+        }
+        missing = [key for key, value in required.items() if not value]
+        if missing:
+            raise RuntimeError(f"missing required production security settings: {', '.join(missing)}")
+        if not COOKIE_SECURE:
+            raise RuntimeError('COOKIE_SECURE must be true in production')
+    if db is not None:
+        await db.sessions.create_index('expires_at', expireAfterSeconds=0)
+        await db.users.create_index('email', unique=True)
+        await db.saves.create_index('user_id', unique=True)
