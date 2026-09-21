@@ -6,7 +6,7 @@ import audio from "@/game/audio";
 import { drawPerks, gemUpgradeCost } from "@/game/config";
 import { loadSave, writeSave, clearSave, loadMeta, writeMeta } from "@/game/storage";
 import { ACHIEVEMENTS, getDailyEngagement, normalizeAchievementProgress, normalizeDailyProgress } from "@/game/engagement";
-import { createStripeCheckout, submitScore, logMonetization } from "@/lib/api";
+import { createStripeCheckout, getCloudSave, saveCloudState, submitScore, logMonetization } from "@/lib/api";
 
 import { AdBanner } from "@/components/game/AdBanner";
 import HUD from "@/components/game/HUD";
@@ -51,7 +51,7 @@ function getHordeImpactCountdown() {
   return Math.max(0, Math.ceil((base - Date.now()) / 1000));
 }
 
-export default function Game() {
+export default function Game({ user }) {
   const canvasRef = useRef(null);
   const wrapRef = useRef(null);
   const engineRef = useRef(null);
@@ -234,6 +234,13 @@ export default function Game() {
     if (saved) engine.loadSaveState(saved);
     engine.start();
 
+    const authToken = localStorage.getItem("aegis_auth_token");
+    if (authToken) {
+      getCloudSave(authToken).then((remote) => {
+        if (remote?.state?.gs && !saved) engine.loadSaveState(remote.state);
+      });
+    }
+
     // SpawnTap adapter
     const st = new SpawnTapAdapter({ appId: "YOUR_SPAWNTAP_APP_ID", debug: true });
     spawntapRef.current = st;
@@ -255,16 +262,22 @@ export default function Game() {
       const e = engineRef.current;
       if (e) writeSave(e.getSaveState());
     }, 3000);
+    const cloudSaveInt = setInterval(() => {
+      const e = engineRef.current;
+      const token = localStorage.getItem("aegis_auth_token");
+      if (e && token) saveCloudState(token, e.getSaveState());
+    }, 10000);
 
     return () => {
       engine.stop();
       ro.disconnect();
       clearInterval(playInt);
       clearInterval(saveInt);
+      clearInterval(cloudSaveInt);
       st.stopPlaytimeTracking();
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [user]);
 
   // ----- rewarded ad flow -----
   const playRewardedAd = useCallback((rewardType) => {

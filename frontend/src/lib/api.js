@@ -5,6 +5,29 @@ export const API = `${BACKEND_URL}/api`;
 
 const http = axios.create({ baseURL: API, timeout: 8000 });
 
+export async function getCurrentUser(token) {
+  const { data } = await http.get("/auth/me", { headers: { Authorization: `Bearer ${token}` } });
+  return data;
+}
+
+export async function getCloudSave(token) {
+  try {
+    const { data } = await http.get("/account/save", { headers: { Authorization: `Bearer ${token}` } });
+    return data;
+  } catch (e) {
+    return null;
+  }
+}
+
+export async function saveCloudState(token, state) {
+  try {
+    const { data } = await http.put("/account/save", { state }, { headers: { Authorization: `Bearer ${token}` } });
+    return data;
+  } catch (e) {
+    return null;
+  }
+}
+
 export async function submitScore(payload) {
   try {
     const { data } = await http.post("/leaderboard", payload);
