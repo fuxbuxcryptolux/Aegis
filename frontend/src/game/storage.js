@@ -1,5 +1,5 @@
 // LocalStorage persistence for in-run progress + permanent meta (soul gems).
-import { emptyDailyProgress, getDailyEngagement, normalizeDailyProgress } from "./engagement";
+import { emptyAchievementProgress, emptyDailyProgress, getDailyEngagement, normalizeAchievementProgress, normalizeDailyProgress } from "./engagement";
 const SAVE_KEY = "aegis_rogue_save_v1";
 const META_KEY = "aegis_rogue_meta_v1";
 
@@ -29,9 +29,19 @@ export function clearSave() {
 export function loadMeta() {
   try {
     const raw = localStorage.getItem(META_KEY);
-    return raw ? JSON.parse(raw) : { soulGems: 0, bestWave: 0, prestigeLevel: 0, playerName: "", daily: emptyDailyProgress() };
+    const meta = raw ? JSON.parse(raw) : {};
+    return {
+      soulGems: 0,
+      bestWave: 0,
+      prestigeLevel: 0,
+      playerName: "",
+      daily: emptyDailyProgress(),
+      achievements: emptyAchievementProgress(),
+      ...meta,
+      achievements: normalizeAchievementProgress(meta.achievements),
+    };
   } catch {
-    return { soulGems: 0, bestWave: 0, prestigeLevel: 0, playerName: "", daily: emptyDailyProgress() };
+    return { soulGems: 0, bestWave: 0, prestigeLevel: 0, playerName: "", daily: emptyDailyProgress(), achievements: emptyAchievementProgress() };
   }
 }
 

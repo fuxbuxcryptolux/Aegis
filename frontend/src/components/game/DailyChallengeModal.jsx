@@ -1,6 +1,6 @@
 import { Check, Gift, Sparkles, X } from "lucide-react";
 
-export default function DailyChallengeModal({ daily, dailyProgress, onClose, onClaimQuest, onClaimChallenge }) {
+export default function DailyChallengeModal({ daily, dailyProgress, achievements = [], achievementProgress, onClose, onClaimQuest, onClaimChallenge, onClaimAchievement }) {
   if (!daily) return null;
 
   const questRows = daily.quests.map((quest) => {
@@ -11,6 +11,10 @@ export default function DailyChallengeModal({ daily, dailyProgress, onClose, onC
   });
 
   const challengeReady = !dailyProgress?.challengeClaimed && (Math.min(3, Math.max(0, dailyProgress?.challengeProgress || 0)) >= 3);
+  const achievementRows = achievements.map((achievement) => {
+    const progress = Math.min(achievement.target, achievementProgress?.stats?.[achievement.stat] || 0);
+    return { ...achievement, progress, claimed: !!achievementProgress?.claimed?.[achievement.id] };
+  });
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-md" data-testid="daily-challenge-modal">
@@ -46,6 +50,14 @@ export default function DailyChallengeModal({ daily, dailyProgress, onClose, onC
             )}
           </div>
 
+          {daily.weekly && (
+            <div className="rounded-2xl border border-fuchsia-500/25 bg-fuchsia-500/5 p-4">
+              <p className="text-[10px] font-mono uppercase tracking-[0.25em] text-fuchsia-300">Weekly event</p>
+              <p className="mt-1 font-display font-bold text-lg uppercase text-white">{daily.weekly.name}</p>
+              <p className="mt-1 text-sm text-zinc-300">{daily.weekly.desc}</p>
+            </div>
+          )}
+
           <div className="space-y-3">
             {questRows.map((quest) => {
               const ready = quest.progress >= quest.target && !quest.claimed;
@@ -75,6 +87,33 @@ export default function DailyChallengeModal({ daily, dailyProgress, onClose, onC
                       className="mt-3 inline-flex items-center gap-2 px-3 py-2 rounded-lg bg-cyan-500/15 border border-cyan-400/40 text-cyan-200 font-bold text-[10px] uppercase tracking-[0.22em]"
                     >
                       <Gift className="w-3.5 h-3.5" /> Claim {quest.reward.gems || 0} gems{quest.reward.gold ? ` / ${quest.reward.gold} gold` : ""}
+                    </button>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+
+          <div className="space-y-3">
+            <div className="flex items-center justify-between">
+              <p className="text-[10px] font-mono uppercase tracking-[0.25em] text-amber-300">Achievements</p>
+              <span className="text-xs text-zinc-500">Win streak: {achievementProgress?.streak || 0}</span>
+            </div>
+            {achievementRows.map((achievement) => {
+              const ready = achievement.progress >= achievement.target && !achievement.claimed;
+              return (
+                <div key={achievement.id} className="rounded-2xl border border-white/10 bg-slate-900/60 p-3">
+                  <div className="flex items-center justify-between gap-3">
+                    <div>
+                      <p className="font-display font-bold text-base uppercase text-white">{achievement.title}</p>
+                      <p className="text-xs text-zinc-400">{achievement.desc}</p>
+                    </div>
+                    <span className="text-[10px] font-mono text-zinc-500">{achievement.progress}/{achievement.target}</span>
+                  </div>
+                  {achievement.claimed && <p className="mt-2 text-[9px] font-mono uppercase tracking-widest text-emerald-300">Reward claimed</p>}
+                  {ready && (
+                    <button onClick={() => onClaimAchievement?.(achievement.id)} className="mt-2 text-[9px] font-mono uppercase tracking-widest text-amber-300 hover:text-amber-200">
+                      Claim achievement reward
                     </button>
                   )}
                 </div>

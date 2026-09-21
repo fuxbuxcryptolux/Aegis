@@ -31,3 +31,12 @@ export async function logMonetization(payload) {
     return null; // never block gameplay on logging
   }
 }
+
+export async function createStripeCheckout(payload) {
+  try {
+    const { data } = await http.post("/monetization/stripe-checkout", payload);
+    return data;
+  } catch (e) {
+    return null;
+  }
+}

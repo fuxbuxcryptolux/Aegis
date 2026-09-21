@@ -1,5 +1,6 @@
 // Aegis Rogue - 60fps HTML5 Canvas tower defense engine (framework agnostic).
 import { WORLD_W, WORLD_H, GRID, generateLevelPath, TOWERS, HERO_ABILITIES, CREEPS, MAX_WAVE, buildWave, TOWER_SPECIALIZATIONS } from "./config";
+import { getDailyEngagement } from "./engagement";
 import audio from "./audio";
 
 function dist(ax, ay, bx, by) {
@@ -114,6 +115,7 @@ export default class GameEngine {
 
   reset(meta = { soulGems: 0, prestigeLevel: 0 }) {
     const bonusGold = 300 + (meta.prestigeLevel || 0) * 100;
+    this.engagement = getDailyEngagement();
     this.gs = {
       nexusHP: 100,
       maxNexusHP: 100,
@@ -144,6 +146,11 @@ export default class GameEngine {
       slowDurMul: 1,
       splashMul: 1,
     };
+    this.mods.fireRateMul *= this.engagement.weekly.fireRateMul || 1;
+    this.mods.goldMul *= this.engagement.weekly.goldMul || 1;
+    this.mods.gemChance += this.engagement.weekly.gemChance || 0;
+    this.gs.maxNexusHP = Math.max(1, Math.round(this.gs.maxNexusHP * (this.engagement.weekly.nexusMul || 1)));
+    this.gs.nexusHP = this.gs.maxNexusHP;
     this.baseMaxTowers = 6;
     this.creeps = [];
     this.towers = [];
@@ -333,6 +340,10 @@ export default class GameEngine {
   applyTowerSpecialization(id) {
     const t = this.selectedPlaced;
     if (!t) return false;
+    if (t.specialization) {
+      this.hooks.onToast?.("This tower already has a specialization.");
+      return false;
+    }
     const specs = TOWER_SPECIALIZATIONS[t.id] || [];
     const spec = specs.find((item) => item.id === id);
     if (!spec) return false;
@@ -1446,6 +1457,7 @@ export default class GameEngine {
       perks: [...this.gs.perks],
       activePath: this.activePath.map((point) => ({ ...point })),
       heroCooldowns: { ...this.hero.cooldowns },
+      weeklyEvent: this.engagement,
       lastWaveLoot: { ...this._lastWaveLoot },
       selectedPlaced: t
         ? {
@@ -1474,7 +1486,7 @@ export default class GameEngine {
         perks: this.gs.perks,
       },
       mods: this.mods,
-      towers: this.towers.map((t) => ({ id: t.id, spotKey: t.spotKey, x: t.x, y: t.y, level: t.level, invested: t.invested })),
+      towers: this.towers.map((t) => ({ id: t.id, spotKey: t.spotKey, x: t.x, y: t.y, level: t.level, invested: t.invested, specialization: t.specialization || null })),
       hero: { x: this.hero.x, y: this.hero.y },
     };
   }
@@ -1495,7 +1507,8 @@ export default class GameEngine {
           angle: 0,
           defender: new KingdomDefender(def, { x: t.x, y: t.y, key: t.spotKey || `${t.x},${t.y}` }, this.maxTowers),
         };
-        tower.defender.hp = tower.defender.maxHp;
+          tower.defender.hp = tower.defender.maxHp;
+          tower.specialization = t.specialization || null;
         return tower;
       });
       this.defenders = this.towers
