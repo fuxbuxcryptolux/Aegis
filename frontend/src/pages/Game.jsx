@@ -3,7 +3,7 @@ import { toast } from "sonner";
 import GameEngine from "@/game/engine";
 import SpawnTapAdapter from "@/game/spawntap_adapter";
 import audio from "@/game/audio";
-import { drawPerks } from "@/game/config";
+import { drawPerks, gemUpgradeCost } from "@/game/config";
 import { loadSave, writeSave, clearSave, loadMeta, writeMeta } from "@/game/storage";
 import { ACHIEVEMENTS, getDailyEngagement, normalizeAchievementProgress, normalizeDailyProgress } from "@/game/engagement";
 import { createStripeCheckout, submitScore, logMonetization } from "@/lib/api";
@@ -19,6 +19,7 @@ import LeaderboardModal from "@/components/game/LeaderboardModal";
 import DailyChallengeModal from "@/components/game/DailyChallengeModal";
 import AdInterstitial from "@/components/game/AdInterstitial";
 import StartScreen from "@/components/game/StartScreen";
+import GemStoreModal from "@/components/game/GemStoreModal";
 
 function getImpactCountdown() {
   const metaData = loadMeta();
@@ -72,6 +73,7 @@ export default function Game() {
   const [showVault, setShowVault] = useState(false);
   const [showLeaderboard, setShowLeaderboard] = useState(false);
   const [showDaily, setShowDaily] = useState(false);
+  const [showGemStore, setShowGemStore] = useState(false);
   const [showEmergencySlot, setShowEmergencySlot] = useState(false);
   const [adModal, setAdModal] = useState(null); // rewardType string
 
@@ -225,7 +227,7 @@ export default function Game() {
       onToast: (m) => toast(m),
     });
     engineRef.current = engine;
-    engine.reset({ soulGems: meta.soulGems || 0, prestigeLevel: meta.prestigeLevel || 0 });
+    engine.reset({ soulGems: meta.soulGems || 0, prestigeLevel: meta.prestigeLevel || 0, gemUpgrades: meta.gemUpgrades || {} });
     engine.resize();
 
     const saved = loadSave();
@@ -395,7 +397,7 @@ export default function Game() {
     setReviveUsed(false);
     setClaimedDouble(false);
     setScoreSubmitted(false);
-    eng.reset({ soulGems: newSoul, prestigeLevel: meta.prestigeLevel || 0 });
+    eng.reset({ soulGems: newSoul, prestigeLevel: meta.prestigeLevel || 0, gemUpgrades: meta.gemUpgrades || {} });
     eng._emitState(true);
     toast(`Run ended. Banked ${earned} Soul Gems (total ${newSoul}).`);
   };
@@ -411,7 +413,7 @@ export default function Game() {
     setClaimedDouble(false);
     setScoreSubmitted(false);
     setReviveUsed(false);
-    eng.reset({ soulGems: eng.gs.soulGems, prestigeLevel: (meta.prestigeLevel || 0) + 1 });
+    eng.reset({ soulGems: eng.gs.soulGems, prestigeLevel: (meta.prestigeLevel || 0) + 1, gemUpgrades: meta.gemUpgrades || {} });
     meta.prestigeLevel = (meta.prestigeLevel || 0) + 1;
     meta.soulGems = eng.gs.soulGems;
     writeMeta(meta);
@@ -462,6 +464,20 @@ export default function Game() {
     setClaimedDouble(false);
     setScoreSubmitted(false);
     toast(`Prestige ${info.prestigeLevel}! +${info.earned} Soul Gems. Starting gold boosted.`);
+  };
+
+  const buyGemUpgrade = (upgrade) => {
+    const level = meta.gemUpgrades?.[upgrade.id] || 0;
+    const cost = gemUpgradeCost(upgrade, level);
+    const eng = engineRef.current;
+    if (!eng || level >= upgrade.maxLevel || eng.gs.gems < cost) return;
+    const nextGems = eng.gs.gems - cost;
+    meta.gemUpgrades = { ...(meta.gemUpgrades || {}), [upgrade.id]: level + 1 };
+    writeMeta(meta);
+    eng.gs.gems = nextGems;
+    eng.applyGemUpgrades(meta.gemUpgrades);
+    eng._emitState(true);
+    toast(`${upgrade.name} upgraded to level ${level + 1}.`);
   };
 
   const soulGemsEarned = Math.max(1, state.wave) + Math.floor(state.gems / 100);
@@ -551,6 +567,7 @@ export default function Game() {
           playtimeSeconds={playtimeSeconds}
           onClose={() => setShowVault(false)}
           onClaimOffer={claimOffer}
+          onOpenGemStore={() => setShowGemStore(true)}
           onPremiumPurchase={startPremiumCheckout}
           onPrestige={doPrestige}
           state={state}
@@ -567,6 +584,14 @@ export default function Game() {
           onClaimQuest={claimDailyQuestReward}
           onClaimChallenge={claimDailyChallengeReward}
           onClaimAchievement={claimAchievementReward}
+        />
+      )}
+      {showGemStore && (
+        <GemStoreModal
+          gems={state.gems}
+          upgrades={meta.gemUpgrades || {}}
+          onBuy={buyGemUpgrade}
+          onClose={() => setShowGemStore(false)}
         />
       )}
       {adModal && <AdInterstitial rewardType={adModal} onComplete={() => closeAd(true)} onSkip={() => closeAd(false)} />}

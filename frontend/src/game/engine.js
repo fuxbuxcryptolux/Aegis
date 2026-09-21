@@ -113,12 +113,14 @@ export default class GameEngine {
     }
   }
 
-  reset(meta = { soulGems: 0, prestigeLevel: 0 }) {
+  reset(meta = { soulGems: 0, prestigeLevel: 0, gemUpgrades: {} }) {
     const bonusGold = 300 + (meta.prestigeLevel || 0) * 100;
+    const gemUpgrades = meta.gemUpgrades || {};
+    const maxHealth = 100 + (gemUpgrades.vitality || 0) * 10;
     this.engagement = getDailyEngagement();
     this.gs = {
-      nexusHP: 100,
-      maxNexusHP: 100,
+      nexusHP: maxHealth,
+      maxNexusHP: maxHealth,
       gold: bonusGold,
       gems: 0,
       soulGems: meta.soulGems || 0,
@@ -145,13 +147,16 @@ export default class GameEngine {
       gemChance: 0.06,
       slowDurMul: 1,
       splashMul: 1,
+      strengthMul: 1 + (gemUpgrades.strength || 0) * 0.04,
+      damageTakenMul: Math.max(0.7, 1 - (gemUpgrades.defense || 0) * 0.03),
+      perkPowerMul: 1 + (gemUpgrades.perks || 0) * 0.03,
     };
     this.mods.fireRateMul *= this.engagement.weekly.fireRateMul || 1;
     this.mods.goldMul *= this.engagement.weekly.goldMul || 1;
     this.mods.gemChance += this.engagement.weekly.gemChance || 0;
     this.gs.maxNexusHP = Math.max(1, Math.round(this.gs.maxNexusHP * (this.engagement.weekly.nexusMul || 1)));
     this.gs.nexusHP = this.gs.maxNexusHP;
-    this.baseMaxTowers = 6;
+    this.baseMaxTowers = 6 + (gemUpgrades.arsenal || 0);
     this.creeps = [];
     this.towers = [];
     this.defenders = [];
@@ -423,7 +428,7 @@ export default class GameEngine {
     return {
       def,
       range: def.range * this.mods.rangeMul * rangeMul * (1 + (t.level - 1) * 0.06),
-      damage: def.damage * lvlMul * this.mods.damageMul * damageMul,
+      damage: def.damage * lvlMul * this.mods.damageMul * this.mods.strengthMul * damageMul,
       fireRate: def.fireRate * this.mods.fireRateMul * fireRateMul,
       slowDur: def.slowDur ? def.slowDur * this.mods.slowDurMul * slowDurMul : undefined,
       splash: def.splash ? def.splash * this.mods.splashMul * splashMul : 0,
@@ -574,7 +579,7 @@ export default class GameEngine {
     if (id === "nuke") {
       this.energyUseCount += 1;
       audio.play("nuke");
-      this.creeps.forEach((c) => this._damage(c, c.boss ? 260 : 260, "#ef4444", false));
+      this.creeps.forEach((c) => this._damage(c, 260 * this.mods.strengthMul, "#ef4444", false));
       this._spawnParticles(this.base.x - 200, WORLD_H / 2, "#ef4444", 40);
       this.hooks.onToast?.("METEOR HAMMER CALLED!");
     } else if (id === "freeze") {
@@ -673,6 +678,17 @@ export default class GameEngine {
     this.hooks.onToast?.("Emergency slot granted for this wave.");
     this._emitState(true);
     return this.maxTowers;
+  }
+
+  applyGemUpgrades(gemUpgrades = {}) {
+    const previousMaxHealth = this.gs.maxNexusHP;
+    const nextMaxHealth = 100 + (gemUpgrades.vitality || 0) * 10;
+    this.gs.maxNexusHP += nextMaxHealth - previousMaxHealth;
+    this.gs.nexusHP = Math.min(this.gs.maxNexusHP, this.gs.nexusHP + Math.max(0, nextMaxHealth - previousMaxHealth));
+    this.baseMaxTowers = 6 + (gemUpgrades.arsenal || 0);
+    this.mods.strengthMul = 1 + (gemUpgrades.strength || 0) * 0.04;
+    this.mods.damageTakenMul = Math.max(0.7, 1 - (gemUpgrades.defense || 0) * 0.03);
+    this.mods.perkPowerMul = 1 + (gemUpgrades.perks || 0) * 0.03;
   }
 
   // ---------- combat helpers ----------
@@ -776,7 +792,7 @@ export default class GameEngine {
     if (this.hero.atkCd <= 0) {
       const tgt = this._firstInRange(this.hero.x, this.hero.y, 120);
       if (tgt) {
-        this._damage(tgt, 12, "#e2e8f0");
+        this._damage(tgt, 12 * this.mods.strengthMul, "#e2e8f0");
         this.arcs.push({ x1: this.hero.x, y1: this.hero.y, x2: tgt.x, y2: tgt.y, life: 0.1, color: "#e2e8f0" });
         this.hero.atkCd = 0.5;
       }
@@ -828,7 +844,7 @@ export default class GameEngine {
       c.x = p.x;
       c.y = p.y;
       if (c.d >= this.pathLen) {
-        this.gs.nexusHP -= c.leak;
+          this.gs.nexusHP -= c.leak * this.mods.damageTakenMul;
         c.hp = 0;
         c.leaked = true;
         audio.play("leak");

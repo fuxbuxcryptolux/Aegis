@@ -162,6 +162,18 @@ export const CREEPS = {
 
 export const MAX_WAVE = 20;
 
+export const GEM_UPGRADES = [
+  { id: "strength", name: "Aegis Strength", description: "+4% tower damage per level", icon: "Swords", color: "#f97316", maxLevel: 10, baseCost: 100, costStep: 75 },
+  { id: "defense", name: "Aegis Defense", description: "-3% Keep damage taken per level", icon: "Shield", color: "#10b981", maxLevel: 10, baseCost: 120, costStep: 90 },
+  { id: "vitality", name: "Keep Vitality", description: "+10 maximum Keep Health per level", icon: "HeartPulse", color: "#ef4444", maxLevel: 10, baseCost: 140, costStep: 100 },
+  { id: "arsenal", name: "Expanded Arsenal", description: "+1 permanent tower slot per level", icon: "LayoutGrid", color: "#06b6d4", maxLevel: 4, baseCost: 250, costStep: 200 },
+  { id: "perks", name: "Perk Mastery", description: "+3% power to drafted perks per level", icon: "Sparkles", color: "#a855f7", maxLevel: 8, baseCost: 180, costStep: 125 },
+];
+
+export function gemUpgradeCost(upgrade, level = 0) {
+  return upgrade.baseCost + upgrade.costStep * level;
+}
+
 // Build a wave's spawn list. Boss every 5 waves.
 export function buildWave(wave) {
   const isBoss = wave % 5 === 0;

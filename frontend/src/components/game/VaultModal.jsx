@@ -27,7 +27,7 @@ function StatusPill({ status }) {
   );
 }
 
-export default function VaultModal({ status, playtimeSeconds, onClose, onClaimOffer, onPremiumPurchase, onPrestige, prestige, state }) {
+export default function VaultModal({ status, playtimeSeconds, onClose, onClaimOffer, onPremiumPurchase, onOpenGemStore, onPrestige, prestige, state }) {
   const [tab, setTab] = useState("offers");
   const iframeRef = useRef(null);
   const mins = Math.floor(playtimeSeconds / 60);
@@ -93,6 +93,9 @@ export default function VaultModal({ status, playtimeSeconds, onClose, onClaimOf
           {tab === "offers" && (
             <div>
               <p className="text-sm text-zinc-400 mb-4">Complete a sponsored offer to instantly claim free Gems and unlock legendary towers.</p>
+              <button onClick={onOpenGemStore} data-testid="open-gem-store-btn" className="mb-4 w-full flex items-center justify-center gap-2 rounded-lg border border-cyan-400/40 bg-cyan-400/10 px-3 py-2 text-xs font-bold uppercase tracking-wide text-cyan-200 hover:bg-cyan-400/20">
+                <Gem className="w-4 h-4" /> Spend Gems on Permanent Upgrades
+              </button>
               <div className="mb-5 rounded-xl border border-cyan-500/30 bg-slate-900/70 p-3">
                 <div className="flex items-center justify-between gap-2 mb-3">
                   <div>

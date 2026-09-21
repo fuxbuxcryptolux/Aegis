@@ -35,13 +35,15 @@ export function loadMeta() {
       bestWave: 0,
       prestigeLevel: 0,
       playerName: "",
+      gemUpgrades: {},
       daily: emptyDailyProgress(),
       achievements: emptyAchievementProgress(),
       ...meta,
+      gemUpgrades: meta.gemUpgrades || {},
       achievements: normalizeAchievementProgress(meta.achievements),
     };
   } catch {
-    return { soulGems: 0, bestWave: 0, prestigeLevel: 0, playerName: "", daily: emptyDailyProgress(), achievements: emptyAchievementProgress() };
+    return { soulGems: 0, bestWave: 0, prestigeLevel: 0, playerName: "", gemUpgrades: {}, daily: emptyDailyProgress(), achievements: emptyAchievementProgress() };
   }
 }
 
