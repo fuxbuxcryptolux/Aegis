@@ -14,7 +14,7 @@ import bcrypt
 from fastapi import APIRouter, Cookie, Depends, FastAPI, HTTPException, Query, Request, Response, status
 CORS_ORIGINS=os.environ.get('CORS_ORIGINS', 'http://localhost:3000').split(','),
 from motor.motor_asyncio import AsyncIOMotorClient
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 from starlette.middleware.cors import CORSMiddleware
 
 try:
@@ -122,6 +122,43 @@ class LoginCreate(BaseModel):
 
 class CloudSave(BaseModel):
     state: Dict[str, Any] = Field(default_factory=dict)
+
+    @field_validator("state")
+    @classmethod
+    def limit_state_size(cls, value: Dict[str, Any]) -> Dict[str, Any]:
+        if len(json.dumps(value, separators=(",", ":"))) > 100_000:
+            raise ValueError("save payload is too large")
+        return value
+
+
+def sanitize_cloud_state(state: Dict[str, Any]) -> Dict[str, Any]:
+    raw_gs = state.get("gs") if isinstance(state.get("gs"), dict) else {}
+    raw_towers = state.get("towers") if isinstance(state.get("towers"), list) else []
+    raw_hero = state.get("hero") if isinstance(state.get("hero"), dict) else {}
+    towers = []
+    for tower in raw_towers[:20]:
+        if not isinstance(tower, dict) or tower.get("id") not in {"archer", "frost", "inferno", "tesla"}:
+            continue
+        towers.append({
+            "id": tower["id"],
+            "spotKey": str(tower.get("spotKey", ""))[:32],
+            "x": max(0, min(960, float(tower.get("x", 0)))),
+            "y": max(0, min(560, float(tower.get("y", 0)))),
+            "level": max(1, min(20, int(tower.get("level", 1)))),
+            "invested": max(0, min(1_000_000, int(tower.get("invested", 0)))),
+        })
+    return {
+        "gs": {
+            "wave": max(0, min(20, int(raw_gs.get("wave", 0)))),
+            "waveStatus": "cleared",
+            "perks": [str(perk)[:40] for perk in raw_gs.get("perks", [])[:20]] if isinstance(raw_gs.get("perks"), list) else [],
+        },
+        "towers": towers,
+        "hero": {
+            "x": max(20, min(940, float(raw_hero.get("x", 0)))),
+            "y": max(20, min(540, float(raw_hero.get("y", 0)))),
+        },
+    }
 
 
 def normalize_email(email: str) -> str:
@@ -244,15 +281,19 @@ async def me(user: Dict[str, Any] = Depends(current_user)):
 @api_router.get("/account/save")
 async def get_cloud_save(user: Dict[str, Any] = Depends(current_user)):
     save = await db.saves.find_one({"user_id": str(user["_id"])}, {"_id": 0, "state": 1, "updated_at": 1})
-    return save or {"state": {}, "updated_at": None}
+    if not save:
+        return {"state": {}, "updated_at": None}
+    save["state"] = sanitize_cloud_state(save.get("state", {}))
+    return save
 
 
 @api_router.put("/account/save")
 async def put_cloud_save(payload: CloudSave, user: Dict[str, Any] = Depends(current_user)):
     saved_at = now_iso()
+    safe_state = sanitize_cloud_state(payload.state)
     await db.saves.update_one(
         {"user_id": str(user["_id"])},
-        {"$set": {"user_id": str(user["_id"]), "state": payload.state, "updated_at": saved_at}},
+        {"$set": {"user_id": str(user["_id"]), "state": safe_state, "updated_at": saved_at}},
         upsert=True,
     )
     return {"status": "ok", "updated_at": saved_at}
@@ -330,7 +371,7 @@ async def claim_reward(payload: RewardClaim):
 
 
 @api_router.post("/monetization/stripe-checkout")
-async def create_stripe_checkout(payload: CheckoutCreate):
+async def create_stripe_checkout(payload: CheckoutCreate, user: Dict[str, Any] = Depends(current_user)):
     if stripe is None or not STRIPE_SECRET_KEY:
         raise HTTPException(status_code=503, detail="stripe checkout is not configured")
     stripe.api_key = STRIPE_SECRET_KEY
@@ -339,7 +380,7 @@ async def create_stripe_checkout(payload: CheckoutCreate):
         line_items=[{"price": payload.price_id, "quantity": 1}],
         success_url=payload.success_url,
         cancel_url=payload.cancel_url,
-        metadata={"player_id": payload.player_id},
+        metadata={"player_id": str(user["_id"])},
     )
     return {"id": session.id, "url": session.url}
 
