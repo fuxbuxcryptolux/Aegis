@@ -1,6 +1,7 @@
 import "@/App.css";
 import { Toaster } from "sonner";
 import Game from "@/pages/Game";
+import SideViewGame from "@/pages/SideViewGame";
 import { useEffect, useState } from "react";
 import AuthScreen from "@/components/auth/AuthScreen";
 import { getCurrentUser, logout } from "@/lib/api";
@@ -8,6 +9,7 @@ import { getCurrentUser, logout } from "@/lib/api";
 function App() {
   const [user, setUser] = useState(null);
   const [checkingAuth, setCheckingAuth] = useState(true);
+  const sideViewEnabled = new URLSearchParams(window.location.search).get("mode") === "sideview";
 
   useEffect(() => {
     getCurrentUser()
@@ -23,7 +25,7 @@ function App() {
 
   return (
     <div className="App">
-      {checkingAuth ? <div className="min-h-screen bg-[#090d16]" /> : user ? <Game user={user} onLogout={handleLogout} /> : <AuthScreen onAuthenticated={setUser} />}
+      {checkingAuth ? <div className="min-h-screen bg-[#090d16]" /> : user ? (sideViewEnabled ? <SideViewGame user={user} onLogout={handleLogout} /> : <Game user={user} onLogout={handleLogout} />) : <AuthScreen onAuthenticated={setUser} />}
       <Toaster
         position="top-center"
         theme="dark"
