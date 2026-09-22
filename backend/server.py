@@ -12,7 +12,6 @@ from typing import Any, Dict, List, Optional
 from dotenv import load_dotenv
 import bcrypt
 from fastapi import APIRouter, Cookie, Depends, FastAPI, HTTPException, Query, Request, Response, status
-CORS_ORIGINS=os.environ.get('CORS_ORIGINS', 'http://localhost:3000').split(','),
 from motor.motor_asyncio import AsyncIOMotorClient
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 from starlette.middleware.cors import CORSMiddleware
