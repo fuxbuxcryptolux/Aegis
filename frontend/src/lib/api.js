@@ -10,6 +10,13 @@ export async function getCurrentUser() {
   return data;
 }
 
+export async function exchangeSupabaseSession(accessToken) {
+  const { data } = await http.post("/auth/supabase/exchange", null, {
+    headers: { Authorization: `Bearer ${accessToken}` },
+  });
+  return data;
+}
+
 export async function logout() {
   try {
     await http.post("/auth/logout");

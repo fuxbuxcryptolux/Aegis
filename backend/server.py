@@ -33,6 +33,7 @@ REWARD_CLAIM_SECRET = os.environ.get('REWARD_CLAIM_SECRET', 'reward-secret')
 SESSION_TTL_DAYS = int(os.environ.get('SESSION_TTL_DAYS', '30'))
 SESSION_COOKIE = 'aegis_session'
 APP_ENV = os.environ.get('APP_ENV', 'development').lower()
+ENABLE_LEGACY_AUTH = os.environ.get('ENABLE_LEGACY_AUTH', 'true' if APP_ENV != 'production' else 'false').lower() == 'true'
 COOKIE_SECURE = os.environ.get('COOKIE_SECURE', 'true' if APP_ENV == 'production' else 'false').lower() == 'true'
 ALLOWED_ORIGINS = [origin.strip().rstrip('/') for origin in os.environ.get('CORS_ORIGINS', 'http://localhost:3000').split(',') if origin.strip()]
 SUPABASE_URL = os.environ.get('SUPABASE_URL', '').rstrip('/')
@@ -225,11 +226,15 @@ async def current_user(request: Request, aegis_session: Optional[str] = Cookie(d
             raise credentials_error
         user = await db.users.find_one({"_id": user_id})
         if not user and claims:
+            user_metadata = claims.get("user_metadata") if isinstance(claims.get("user_metadata"), dict) else {}
+            marketing_opt_in = user_metadata.get("marketing_opt_in") is True
             user = {
                 "_id": user_id,
                 "name": str(claims.get("user_metadata", {}).get("name") or claims.get("email", "Commander"))[:24],
                 "email": str(claims.get("email", ""))[:254],
-                "marketing_opt_in": False,
+                "marketing_opt_in": marketing_opt_in,
+                "marketing_consent_at": now_iso() if marketing_opt_in else None,
+                "marketing_consent_source": "supabase_signup" if marketing_opt_in else None,
                 "auth_provider": "supabase",
                 "created_at": now_iso(),
                 "updated_at": now_iso(),
@@ -262,6 +267,8 @@ async def health():
 
 @api_router.post("/auth/register")
 async def register(payload: RegisterCreate, response: Response):
+    if not ENABLE_LEGACY_AUTH:
+        raise HTTPException(status_code=410, detail="use Supabase Auth")
     if db is None:
         raise HTTPException(status_code=503, detail="account storage is not configured")
     email = normalize_email(payload.email)
@@ -288,6 +295,8 @@ async def register(payload: RegisterCreate, response: Response):
 
 @api_router.post("/auth/login")
 async def login(payload: LoginCreate, response: Response):
+    if not ENABLE_LEGACY_AUTH:
+        raise HTTPException(status_code=410, detail="use Supabase Auth")
     if db is None:
         raise HTTPException(status_code=503, detail="account storage is not configured")
     user = await db.users.find_one({"email": normalize_email(payload.email)})

@@ -1,6 +1,8 @@
 import { useState } from "react";
 import { KeyRound, Mail, Shield, UserRound } from "lucide-react";
 import { LOGIN, REGISTER } from "@/constants/testIds";
+import { exchangeSupabaseSession } from "@/lib/api";
+import { getSupabaseClient } from "@/lib/supabaseClient";
 
 export default function AuthScreen({ onAuthenticated }) {
   const [mode, setMode] = useState("login");
@@ -22,15 +24,18 @@ export default function AuthScreen({ onAuthenticated }) {
     }
     setBusy(true);
     try {
-      const response = await fetch(`${process.env.REACT_APP_BACKEND_URL || ""}/api/auth/${isRegister ? "register" : "login"}`, {
-        method: "POST",
-        credentials: "include",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(isRegister ? { name, email, password, marketing_opt_in: marketingOptIn } : { email, password }),
-      });
-      const body = await response.json();
-      if (!response.ok) throw new Error(body.detail || "Unable to authenticate.");
-      onAuthenticated(body.user);
+      const supabase = getSupabaseClient();
+      const result = isRegister
+        ? await supabase.auth.signUp({ email, password, options: { data: { name, marketing_opt_in: marketingOptIn } } })
+        : await supabase.auth.signInWithPassword({ email, password });
+      if (result.error) throw result.error;
+      if (!result.data.session) {
+        setError("Check your email to verify the account before logging in.");
+        return;
+      }
+      const exchanged = await exchangeSupabaseSession(result.data.session.access_token);
+      await supabase.auth.signOut();
+      onAuthenticated(exchanged.user);
     } catch (requestError) {
       setError(requestError.message);
     } finally {
