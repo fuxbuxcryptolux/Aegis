@@ -11,6 +11,7 @@ from typing import Any, Dict, List, Optional
 
 from dotenv import load_dotenv
 import bcrypt
+import jwt
 from fastapi import APIRouter, Cookie, Depends, FastAPI, HTTPException, Query, Request, Response, status
 from motor.motor_asyncio import AsyncIOMotorClient
 from pydantic import BaseModel, ConfigDict, Field, field_validator
@@ -34,6 +35,9 @@ SESSION_COOKIE = 'aegis_session'
 APP_ENV = os.environ.get('APP_ENV', 'development').lower()
 COOKIE_SECURE = os.environ.get('COOKIE_SECURE', 'true' if APP_ENV == 'production' else 'false').lower() == 'true'
 ALLOWED_ORIGINS = [origin.strip().rstrip('/') for origin in os.environ.get('CORS_ORIGINS', 'http://localhost:3000').split(',') if origin.strip()]
+SUPABASE_URL = os.environ.get('SUPABASE_URL', '').rstrip('/')
+SUPABASE_JWKS_URL = os.environ.get('SUPABASE_JWKS_URL', '')
+SUPABASE_ISSUER = os.environ.get('SUPABASE_ISSUER', f'{SUPABASE_URL}/auth/v1' if SUPABASE_URL else '')
 
 # MongoDB connection
 mongo_url = os.environ.get('MONGO_URL')
@@ -177,6 +181,17 @@ def hash_session(token: str) -> str:
     return hashlib.sha256(token.encode()).hexdigest()
 
 
+def verify_supabase_token(token: str) -> Dict[str, Any]:
+    if not SUPABASE_JWKS_URL or not SUPABASE_ISSUER:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="invalid authentication credentials")
+    try:
+        jwks_client = jwt.PyJWKClient(SUPABASE_JWKS_URL)
+        signing_key = jwks_client.get_signing_key_from_jwt(token)
+        return jwt.decode(token, signing_key.key, algorithms=["ES256", "RS256"], audience="authenticated", issuer=SUPABASE_ISSUER)
+    except (jwt.PyJWKClientError, jwt.PyJWTError, ValueError):
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="invalid authentication credentials")
+
+
 async def create_session(user_id: str) -> str:
     token = secrets.token_urlsafe(48)
     now = datetime.now(timezone.utc)
@@ -192,15 +207,34 @@ async def create_session(user_id: str) -> str:
 async def current_user(request: Request, aegis_session: Optional[str] = Cookie(default=None)) -> Dict[str, Any]:
     credentials_error = HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="invalid authentication credentials")
     try:
-        if not aegis_session or db is None:
+        if db is None:
             raise credentials_error
-        session = await db.sessions.find_one({"_id": hash_session(aegis_session)})
-        raw_expiry = session.get("expires_at") if session else None
-        expires_at = datetime.fromisoformat(raw_expiry) if isinstance(raw_expiry, str) else raw_expiry or datetime.min.replace(tzinfo=timezone.utc)
-        user_id = str(session.get("user_id", "")).strip() if session and expires_at > datetime.now(timezone.utc) else ""
+        user_id = ""
+        claims: Dict[str, Any] = {}
+        if aegis_session:
+            session = await db.sessions.find_one({"_id": hash_session(aegis_session)})
+            raw_expiry = session.get("expires_at") if session else None
+            expires_at = datetime.fromisoformat(raw_expiry) if isinstance(raw_expiry, str) else raw_expiry or datetime.min.replace(tzinfo=timezone.utc)
+            user_id = str(session.get("user_id", "")).strip() if session and expires_at > datetime.now(timezone.utc) else ""
+        else:
+            authorization = request.headers.get("Authorization", "")
+            if authorization.startswith("Bearer "):
+                claims = verify_supabase_token(authorization[7:].strip())
+                user_id = str(claims.get("sub", "")).strip()
         if not user_id or db is None:
             raise credentials_error
         user = await db.users.find_one({"_id": user_id})
+        if not user and claims:
+            user = {
+                "_id": user_id,
+                "name": str(claims.get("user_metadata", {}).get("name") or claims.get("email", "Commander"))[:24],
+                "email": str(claims.get("email", ""))[:254],
+                "marketing_opt_in": False,
+                "auth_provider": "supabase",
+                "created_at": now_iso(),
+                "updated_at": now_iso(),
+            }
+            await db.users.update_one({"_id": user_id}, {"$setOnInsert": user}, upsert=True)
     except (ValueError, TypeError):
         raise credentials_error
     if not user:
@@ -270,6 +304,13 @@ async def logout(response: Response, aegis_session: Optional[str] = Cookie(defau
         await db.sessions.delete_one({"_id": hash_session(aegis_session)})
     response.delete_cookie(SESSION_COOKIE, secure=COOKIE_SECURE, httponly=True, samesite="strict")
     return {"status": "ok"}
+
+
+@api_router.post("/auth/supabase/exchange")
+async def exchange_supabase_session(response: Response, user: Dict[str, Any] = Depends(current_user)):
+    session_token = await create_session(str(user["_id"]))
+    response.set_cookie(SESSION_COOKIE, session_token, httponly=True, secure=COOKIE_SECURE, samesite="strict", max_age=SESSION_TTL_DAYS * 86400)
+    return {"user": public_user(user)}
 
 
 @api_router.get("/auth/me")
@@ -477,7 +518,6 @@ async def validate_security_configuration():
     if APP_ENV == 'production':
         required = {
             'MONGO_URL': mongo_url,
-            'JWT_SECRET': os.environ.get('JWT_SECRET'),
             'OFFERWALL_SECRET': os.environ.get('OFFERWALL_SECRET'),
             'REWARD_CLAIM_SECRET': os.environ.get('REWARD_CLAIM_SECRET'),
             'STRIPE_WEBHOOK_SECRET': os.environ.get('STRIPE_WEBHOOK_SECRET'),
@@ -487,6 +527,8 @@ async def validate_security_configuration():
             raise RuntimeError(f"missing required production security settings: {', '.join(missing)}")
         if not COOKIE_SECURE:
             raise RuntimeError('COOKIE_SECURE must be true in production')
+        if not SUPABASE_JWKS_URL or not SUPABASE_ISSUER:
+            raise RuntimeError('SUPABASE_JWKS_URL and SUPABASE_ISSUER are required in production')
     if db is not None:
         await db.sessions.create_index('expires_at', expireAfterSeconds=0)
         await db.users.create_index('email', unique=True)
