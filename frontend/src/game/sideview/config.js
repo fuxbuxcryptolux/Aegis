@@ -14,7 +14,7 @@ export const SIDEVIEW_ARCHETYPES = {
   ghost: { id: "ghost", name: "Ghost", speed: 58, hp: 48, reward: 8, leak: 5, radius: 14 },
   goblin: { id: "goblin", name: "Goblin", speed: 48, hp: 78, reward: 11, leak: 6, radius: 15 },
   gnome: { id: "gnome", name: "Gnome", speed: 38, hp: 135, reward: 18, leak: 8, radius: 17 },
-  zombie: { id: "zombie", name: "Zombie", speed: 27, hp: 230, reward: 28, leak: 12, radius: 20 },
+  troll: { id: "troll", name: "Troll", speed: 27, hp: 230, reward: 28, leak: 12, radius: 20 },
 };
 
 export const SQUAD_ROSTER = [

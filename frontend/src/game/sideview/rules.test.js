@@ -12,10 +12,10 @@ describe("side-view enemy variants", () => {
   });
 
   test("scales bosses while preserving archetype and variant identity", () => {
-    const boss = deriveEnemyVariant("zombie", "purple", 5, 1, true);
+    const boss = deriveEnemyVariant("troll", "purple", 5, 1, true);
     expect(boss.boss).toBe(true);
     expect(boss.maxHp).toBeGreaterThan(1000);
-    expect(boss.id).toBe("zombie_purple");
+    expect(boss.id).toBe("troll_purple");
   });
 });
 
@@ -24,7 +24,7 @@ describe("side-view waves and lanes", () => {
     const early = buildSideViewWave(1);
     const late = buildSideViewWave(8);
     expect(new Set(early.enemies.map((enemy) => enemy.archetype))).toEqual(new Set(["ghost", "goblin"]));
-    expect(new Set(late.enemies.map((enemy) => enemy.archetype))).toEqual(new Set(["ghost", "goblin", "gnome", "zombie"]));
+    expect(new Set(late.enemies.map((enemy) => enemy.archetype))).toEqual(new Set(["ghost", "goblin", "gnome", "troll"]));
     expect(new Set(early.enemies.map((enemy) => enemy.variant)).size).toBeGreaterThan(0);
     expect(new Set(late.enemies.map((enemy) => enemy.variant)).size).toBe(4);
   });

@@ -3,7 +3,7 @@ import { LogOut, Pause, Play, RotateCcw, Shield, Swords, Zap } from "lucide-reac
 import { NEON_VARIANTS, SIDEVIEW_TOWER_SPOTS, SIDEVIEW_TOWER_TYPES, SIDEVIEW_WORLD, SQUAD_ROSTER } from "@/game/sideview/config";
 import { advanceLaneEnemy, buildSideViewWave, deriveEnemyVariant } from "@/game/sideview/rules";
 import { createSquadState, issueSquadCommand, tickSquad } from "@/game/sideview/squad";
-import { drawNeonEnemy } from "@/game/sideview/enemySprites";
+import { drawNeonEnemy, drawSquadSprite, drawTowerSprite } from "@/game/sideview/enemySprites";
 
 const INITIAL_GOLD = 300;
 
@@ -39,9 +39,14 @@ function paintBackground(ctx, width, height, scale, offsetX, offsetY, model) {
   }
   for (const tower of model.towers) {
     const y = SIDEVIEW_WORLD.laneYs[tower.lane] - 44;
-    ctx.save(); ctx.translate(tower.x, y); ctx.shadowColor = tower.color; ctx.shadowBlur = 16; ctx.fillStyle = `${tower.color}44`; ctx.strokeStyle = tower.color; ctx.lineWidth = 3;
-    ctx.beginPath(); ctx.moveTo(-15, 14); ctx.lineTo(0, -17); ctx.lineTo(15, 14); ctx.closePath(); ctx.fill(); ctx.stroke(); ctx.restore();
+    if (!drawTowerSprite(ctx, tower, tower.x, y, 58, 58)) {
+      ctx.save(); ctx.translate(tower.x, y); ctx.shadowColor = tower.color; ctx.shadowBlur = 16; ctx.fillStyle = `${tower.color}44`; ctx.strokeStyle = tower.color; ctx.lineWidth = 3;
+      ctx.beginPath(); ctx.moveTo(-15, 14); ctx.lineTo(0, -17); ctx.lineTo(15, 14); ctx.closePath(); ctx.fill(); ctx.stroke(); ctx.restore();
+    }
   }
+  SQUAD_ROSTER.forEach((unit, index) => {
+    drawSquadSprite(ctx, unit.id === "engineer" ? "blacksmith" : unit.id, 680 + index * 68, 520, 54, 54);
+  });
   if (model.waveActive) { ctx.fillStyle = "#94a3b8"; ctx.font = "600 12px sans-serif"; ctx.fillText(`WAVE ${model.wave}`, 820, 38); }
   ctx.restore();
 }

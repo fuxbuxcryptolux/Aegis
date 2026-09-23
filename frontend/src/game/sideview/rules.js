@@ -26,7 +26,7 @@ export function deriveEnemyVariant(archetypeId, variantId, wave = 1, lane = 0, b
 
 export function buildSideViewWave(wave) {
   const safeWave = Math.max(1, Math.min(SIDEVIEW_MAX_WAVE, wave));
-  const archetypes = safeWave < 3 ? ["ghost", "goblin"] : safeWave < 6 ? ["ghost", "goblin", "gnome"] : ["ghost", "goblin", "gnome", "zombie"];
+  const archetypes = safeWave < 3 ? ["ghost", "goblin"] : safeWave < 6 ? ["ghost", "goblin", "gnome"] : ["ghost", "goblin", "gnome", "troll"];
   const variantCount = Math.min(7, 1 + Math.floor((safeWave - 1) / 2));
   const variantIds = Object.keys(NEON_VARIANTS).slice(0, variantCount);
   const enemies = [];
