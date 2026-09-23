@@ -26,7 +26,7 @@ export default function AuthScreen({ onAuthenticated }) {
     try {
       const supabase = getSupabaseClient();
       const result = isRegister
-        ? await supabase.auth.signUp({ email, password, options: { data: { name, marketing_opt_in: marketingOptIn } } })
+        ? await supabase.auth.signUp({ email, password, options: { emailRedirectTo: window.location.origin, data: { name, marketing_opt_in: marketingOptIn } } })
         : await supabase.auth.signInWithPassword({ email, password });
       if (result.error) throw result.error;
       if (!result.data.session) {
