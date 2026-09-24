@@ -2,6 +2,7 @@ import { useState } from "react";
 import { KeyRound, Mail, Shield, UserRound } from "lucide-react";
 import { LOGIN, REGISTER } from "@/constants/testIds";
 import { exchangeSupabaseSession } from "@/lib/api";
+import { getAuthRedirectUrl } from "@/lib/authRedirect";
 import { getSupabaseClient } from "@/lib/supabaseClient";
 
 export default function AuthScreen({ onAuthenticated }) {
@@ -25,8 +26,9 @@ export default function AuthScreen({ onAuthenticated }) {
     setBusy(true);
     try {
       const supabase = getSupabaseClient();
+      const emailRedirectTo = getAuthRedirectUrl();
       const result = isRegister
-        ? await supabase.auth.signUp({ email, password, options: { emailRedirectTo: window.location.origin, data: { name, marketing_opt_in: marketingOptIn } } })
+        ? (console.debug("[Aegis auth] signUp redirect", { href: window.location.href, origin: window.location.origin, emailRedirectTo }), await supabase.auth.signUp({ email, password, options: { emailRedirectTo, data: { name, marketing_opt_in: marketingOptIn } } }))
         : await supabase.auth.signInWithPassword({ email, password });
       if (result.error) throw result.error;
       if (!result.data.session) {
