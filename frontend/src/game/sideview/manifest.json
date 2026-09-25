@@ -1,0 +1,122 @@
+{
+  "version": 1,
+  "purpose": "Aegis Rogue prototype runtime art handoff",
+  "notes": [
+    "Runtime atlases use transparent PNGs and fixed cells.",
+    "Enemy atlases use one canonical static pose per class, with seven neon variants.",
+    "Ghost uses the first seven standard color cells from the supplied ghost pack; three alternate expressions remain in reference only.",
+    "No non-neon enemy art is included in the runtime folders.",
+    "Bosses and Castle Squad are separate larger assets.",
+    "Turrets use the fantasy/medieval-themed designs from the supplied pack.",
+    "Gnome and Troll runtime atlases were background-cleaned from their supplied source imagery before cropping."
+  ],
+  "neon_order": [
+    "pink",
+    "cyan",
+    "green",
+    "yellow",
+    "orange",
+    "red",
+    "purple"
+  ],
+  "enemy_atlases": {
+    "ghost": {
+      "file": "sprites/enemies/ghost_neon.png",
+      "cellWidth": 256,
+      "cellHeight": 256,
+      "variantColumns": [
+        "pink",
+        "cyan",
+        "green",
+        "yellow",
+        "orange",
+        "red",
+        "purple"
+      ]
+    },
+    "goblin": {
+      "file": "sprites/enemies/goblin_neon.png",
+      "cellWidth": 256,
+      "cellHeight": 256,
+      "variantColumns": [
+        "pink",
+        "cyan",
+        "green",
+        "yellow",
+        "orange",
+        "red",
+        "purple"
+      ]
+    },
+    "gnome": {
+      "file": "sprites/enemies/gnome_neon.png",
+      "cellWidth": 256,
+      "cellHeight": 256,
+      "variantColumns": [
+        "pink",
+        "cyan",
+        "green",
+        "yellow",
+        "orange",
+        "red",
+        "purple"
+      ]
+    },
+    "troll": {
+      "file": "sprites/enemies/troll_neon.png",
+      "cellWidth": 256,
+      "cellHeight": 256,
+      "variantColumns": [
+        "pink",
+        "cyan",
+        "green",
+        "yellow",
+        "orange",
+        "red",
+        "purple"
+      ]
+    }
+  },
+  "bosses": {
+    "demon_lord": {
+      "file": "sprites/bosses/demon_lord.png",
+      "pose": "raised flaming sword / charging attack"
+    }
+  },
+  "squad": {
+    "file": "sprites/squad/castle_squad.png",
+    "cellWidth": 320,
+    "cellHeight": 320,
+    "columns": [
+      "blacksmith",
+      "arcanist",
+      "ranger",
+      "vanguard"
+    ]
+  },
+  "turrets": {
+    "file": "sprites/turrets/turret_atlas.png",
+    "cellWidth": 256,
+    "cellHeight": 256,
+    "columns": [
+      "archer_tower",
+      "mage_tower",
+      "ballista_tower",
+      "frost_tower",
+      "poison_tower",
+      "lightning_tower",
+      "fire_tower",
+      "heal_tower",
+      "barrier_tower"
+    ]
+  },
+  "future_bosses": [
+    "nuclear_behemoth",
+    "master_necromancer"
+  ],
+  "future_enemy_classes": [
+    "skeleton",
+    "slime",
+    "shadow_hound"
+  ]
+}
